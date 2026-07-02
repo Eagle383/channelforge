@@ -135,10 +135,14 @@ def build_outputs(log=lambda s: None):
         attrs["channel-id"] = f"cf-{ch['id']}"
         number = ch["number"]
         inherited = child_attrs.get("channel-number", "") or child_attrs.get("tvg-chno", "")
-        if not number and auto_no is not None and "." not in inherited:   # dotted = real OTA number, keep it
-            number = str(auto_no)
-            num_updates.append((number, ch["id"]))
-            auto_no += 1
+        if not number:
+            if auto_no is not None and "." not in inherited:   # dotted = real OTA number, keep it
+                number = str(auto_no)
+                auto_no += 1
+            else:
+                number = inherited
+            if number:   # persist whatever the channel actually uses so it's visible and editable
+                num_updates.append((number, ch["id"]))
         if number:
             attrs["channel-number"] = number
             attrs["tvg-chno"] = number
