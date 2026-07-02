@@ -3,6 +3,17 @@ import hashlib
 import re
 
 _ATTR_RE = re.compile(r'([a-zA-Z0-9\-]+)="([^"]*)"')
+_PROVIDER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*)\.")
+
+
+def provider_of(external_id):
+    """Provider prefix of a combined-feed channel id (samsung.x -> samsung).
+
+    Ids that don't start with a letter (e.g. OTA numbers like 3.1) have no
+    provider and return "".
+    """
+    m = _PROVIDER_RE.match(external_id or "")
+    return m.group(1).lower() if m else ""
 
 # EXTINF attribute names Channels DVR understands, in output order
 CHANNELS_ATTRS = [

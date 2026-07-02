@@ -100,8 +100,14 @@ def build_outputs(log=lambda s: None):
         SELECT sc.*, s.priority AS src_priority, s.stream_format AS src_format
         FROM source_channels sc JOIN sources s ON s.id = sc.source_id
         WHERE sc.channel_id IS NOT NULL AND s.active = 1
-        ORDER BY s.priority, sc.id
     """)
+    # source priority first, then the drag-and-drop provider order for
+    # combined feeds where one source carries many providers (samsung.*,
+    # stirr.*, ...); unranked providers sort last
+    rank = {p: i for i, p in enumerate(json.loads(db.get_setting("provider_order") or "[]"))}
+    unranked = len(rank)
+    children = sorted(children, key=lambda c: (
+        c["src_priority"], rank.get(m3u.provider_of(c["external_id"]), unranked), c["id"]))
     by_channel = {}
     for c in children:
         by_channel.setdefault(c["channel_id"], []).append(c)

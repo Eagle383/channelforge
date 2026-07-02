@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 
-from . import channels_dvr, csv_io, db, importer, jobs, refresh, rules
+from . import channels_dvr, csv_io, db, importer, jobs, m3u, refresh, rules
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title="channelforge")
@@ -57,7 +57,18 @@ def dashboard(request: Request):
 def sources_page(request: Request):
     rows = db.q("""SELECT s.*, (SELECT COUNT(*) FROM source_channels sc WHERE sc.source_id = s.id AND sc.present = 1) n
                    FROM sources s ORDER BY s.priority, s.name""")
-    return render("sources.html", request, sources=rows)
+    order = json.loads(db.get_setting("provider_order") or "[]")
+    found = {m3u.provider_of(r["external_id"]) for r in db.q("SELECT DISTINCT external_id FROM source_channels WHERE present = 1")} - {""}
+    providers = [p for p in order if p in found] + sorted(found - set(order))
+    return render("sources.html", request, sources=rows, providers=providers)
+
+
+@app.post("/sources/provider_order")
+async def sources_provider_order(request: Request):
+    form = await request.form()
+    order = [p.strip() for p in str(form.get("order", "")).split(",") if p.strip()]
+    db.set_setting("provider_order", json.dumps(order))
+    return PlainTextResponse("ok")
 
 
 @app.post("/sources/save")

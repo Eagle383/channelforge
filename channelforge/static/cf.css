@@ -30,6 +30,9 @@ form.inline { display:inline-flex; gap:6px; align-items:center; margin:0; }
 .badge.ok { background:#1f3427; color:#7fd39a; } .badge.bad { background:#3a2222; color:#e09a9a; } .badge.run { background:#3a2f1d; color:#eeb46b; }
 .dim { color:var(--dim); } .small { font-size:12px; }
 pre.log { background:#0e1013; border:1px solid var(--line); border-radius:8px; padding:12px; white-space:pre-wrap; max-height:480px; overflow:auto; font-size:12px; }
+.prov-list { max-width:360px; padding-left:34px; margin:8px 0; }
+.prov-list li { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 12px; margin:4px 0; cursor:grab; }
+.prov-list li:active { cursor:grabbing; border-color:var(--acc); }
 details.editor { margin-bottom:14px; }
 details.editor summary { cursor:pointer; color:var(--acc); font-weight:600; }
 .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; margin-top:8px; }
