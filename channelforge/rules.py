@@ -6,8 +6,21 @@ everything else (regex, contains, ...) runs as an ordered scan. This is what kee
 """
 import json
 import re
+import unicodedata
 
 from . import db
+
+_NORM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def normalize(name):
+    """Collapse a name for fuzzy matching: casefold, drop accents/punctuation/spacing.
+
+    '123 GO!', '123 Go' and '123GO!' all become '123go', so providers'
+    spelling variants of the same channel land on one key.
+    """
+    s = unicodedata.normalize("NFKD", name or "").casefold()
+    return _NORM_RE.sub("", s)
 
 MATCH_FIELDS = ["name", "tvg_id", "tvg_name", "group", "url", "external_id", "any"]
 MATCH_TYPES = ["equals", "not_equals", "contains", "not_contains", "starts", "not_starts", "ends", "not_ends", "regex", "not_regex"]
@@ -120,10 +133,22 @@ def load_engine():
 
 
 def apply_all(log=lambda s: None):
-    """Re-run rules over every present, unassigned, non-ignored source channel."""
+    """Re-run rules over every present, unassigned, non-ignored source channel.
+
+    After the rules, source channels still unassigned can fall through to
+    normalized-name matching against existing channels (and optionally
+    auto-create a channel when nothing matches). Ignore rules always win.
+    """
     engine = load_engine()
+    auto_match = db.get_setting("auto_assign_normalized") != "0"
+    auto_create = db.get_setting("auto_create_channels") == "1"
+    by_norm = {}
+    if auto_match:
+        # prefer curated (numbered) channels, then oldest, when variants collide
+        for ch in db.q("SELECT id, name FROM channels ORDER BY (number != '') DESC, id"):
+            by_norm.setdefault(normalize(ch["name"]), ch["id"])
     rows = db.q("SELECT * FROM source_channels WHERE present = 1")
-    assigned = ignored_n = changed_n = 0
+    assigned = ignored_n = changed_n = matched = created = 0
     updates = []
     for row in rows:
         sc = dict(row)
@@ -138,6 +163,17 @@ def apply_all(log=lambda s: None):
         if ignored and not sc["ignored"] and sc["channel_id"] is None:
             new_ignored = 1
             ignored_n += 1
+        if auto_match and new_channel is None and not new_ignored:
+            key = normalize(sc["name"])
+            if key:
+                cid = by_norm.get(key)
+                if cid is None and auto_create:
+                    cid = db.execute("INSERT INTO channels(name) VALUES(?)", (sc["name"],)).lastrowid
+                    by_norm[key] = cid
+                    created += 1
+                if cid is not None:
+                    new_channel = cid
+                    matched += 1
         new_name = sc["name"]
         if changed:
             changed_n += 1
@@ -146,5 +182,8 @@ def apply_all(log=lambda s: None):
 
     if updates:
         db.executemany("UPDATE source_channels SET channel_id = ?, ignored = ?, name = ? WHERE id = ?", updates)
-    log(f"rules: {assigned} assigned, {ignored_n} ignored, {changed_n} field changes")
-    return assigned, ignored_n
+    msg = f"rules: {assigned} assigned, {ignored_n} ignored, {changed_n} field changes"
+    if auto_match:
+        msg += f"; name-match: {matched} assigned, {created} channels created"
+    log(msg)
+    return assigned + matched, ignored_n

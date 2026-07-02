@@ -100,6 +100,8 @@ DEFAULT_SETTINGS = {
     "schedule.refresh_dvr_m3u": "",
     "base_url": "",                            # external URL of this app for m3u links; blank = derive from request
     "auto_rule_on_assign": "1",                # manual assign/ignore also creates a matching equals rule
+    "auto_assign_normalized": "1",             # unmatched source channels attach to channels by normalized name
+    "auto_create_channels": "0",               # ...and create the channel when nothing matches
     "provider_order": "[]",                    # JSON list: provider prefixes (samsung, stirr, ...) best-first
 }
 
