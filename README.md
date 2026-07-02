@@ -7,6 +7,8 @@ Point it at your playlists, map their channels onto one canonical lineup (by han
 - **Sources** — any number of M3U playlists, each with optional XMLTV guide and a priority.
 - **One lineup** — each channel streams from its best available source, with automatic failover when a stream goes unhealthy.
 - **Rules** — assign/ignore/rewrite source channels automatically. Exact-match rules use an O(1) index (use thousands freely); regex fully supported.
+- **Hands-off assignment** — after rules, unmatched channels auto-assign by normalized name ("123 GO!" = "123GO!"), optionally auto-creating the channel; assigning or ignoring by hand creates the matching rule for you.
+- **Provider priority** — combined feeds carrying many providers (`samsung.*`, `stirr.*`, ...) dedupe by a drag-and-drop provider order.
 - **Outputs** — chunked M3Us split by guide type (Gracenote vs XMLTV) and stream format (HLS vs MPEG-TS), plus one combined, filtered guide XML.
 - **DVR integration** — one-click (or automatic) registration of all outputs as Channels DVR custom channel sources, across one or many DVR servers.
 - **Bulk editing** — channels, rules, and assignments all round-trip through CSV: export, edit in a spreadsheet, import back.
@@ -46,11 +48,11 @@ Ten minutes, start to finish:
 
 **Channels vs. source channels.** A *channel* is one entry in your canonical lineup ("CNN"). A *source channel* is one entry in one M3U ("CNN from Pluto", "CNN from Samsung TV Plus"). Assignment links them: many source channels can point at one channel.
 
-**Stream selection.** At output time each channel picks a stream from its assigned source channels: healthy streams first, source priority order within those, and an optional per-channel *preferred source* that overrides priority. If a stream starts failing health checks, the next refresh fails over automatically.
+**Stream selection.** At output time each channel picks a stream from its assigned source channels: healthy streams first, source priority order within those, then the provider order (Sources page, drag to reorder) as the tie-break inside combined feeds, and an optional per-channel *preferred source* that overrides priority. If a stream starts failing health checks, the next refresh fails over automatically.
 
 **Outputs.** Channels with a Gracenote station ID land in the *gracenote* M3Us (the DVR's own guide data); everything else lands in the *epg* M3Us paired with the combined XMLTV guide, filtered to only the channels you actually use. Each group is further split by stream format and chunked (default 1200 channels per file) because Channels DVR handles several medium playlists better than one giant one.
 
-**Channel numbers.** By default channels keep whatever number their source supplies. Set *auto-number starting at* to renumber every unnumbered channel sequentially from your chosen base — assigned numbers are saved onto each channel so they never reshuffle, dotted OTA numbers like `7.1` are left alone, and a number you set manually always wins.
+**Channel numbers.** A number you set manually (editable inline on the Channels page) always wins. Otherwise, set *auto-number starting at* to number every channel sequentially from your chosen base; dotted OTA numbers like `7.1` are kept as-is, and with auto-numbering off channels keep their source-supplied numbers. Whatever number a channel actually uses is saved onto it at refresh, so numbers are always visible, editable, and stable across refreshes and updates.
 
 ## Settings reference
 
@@ -61,6 +63,9 @@ Ten minutes, start to finish:
 | External base URL | How the DVR reaches channelforge; required for auto-push, derived from your browser URL otherwise |
 | Max channels per m3u | Chunk size for output playlists |
 | Auto-number channels starting at | Blank = keep source numbers; see *Channel numbers* above |
+| Manual assign/ignore creates a rule | Assign page actions also insert the matching equals rule (default on) |
+| Auto-assign by normalized name | Unmatched source channels attach to channels by collapsed-name match (default on) |
+| Auto-create channels | Create the channel when nothing matches — hands-off lineup building (default off) |
 | Health: fail threshold | Consecutive failed checks before a stream is marked unhealthy |
 | Health: concurrency | Parallel stream checks |
 | Daily schedule | HH:MM per job, blank = off |
