@@ -5,6 +5,15 @@
   <form class="inline grow" method="get">
     <input name="q" value="{{ q }}" placeholder="search name..." style="width:240px">
     <select name="show"><option value="all" {{ 'selected' if show == 'all' }}>all</option><option value="inactive" {{ 'selected' if show == 'inactive' }}>inactive only</option></select>
+    <select name="src">
+      <option value="">any source</option>
+      {% for s in sources %}<option value="{{ s.id }}" {{ 'selected' if src == s.id|string }}>{{ s.name }}</option>{% endfor %}
+    </select>
+    <select name="sort">
+      <option value="name" {{ 'selected' if sort != 'source' }}>sort: name</option>
+      <option value="source" {{ 'selected' if sort == 'source' }}>sort: source</option>
+      <option value="number" {{ 'selected' if sort == 'number' }}>sort: number</option>
+    </select>
     <button class="quiet">Filter</button>
   </form>
   <a class="btn quiet" href="/export/channels.csv">Export CSV</a>
@@ -28,13 +37,19 @@
 </form></details>
 
 <table>
-  <tr><th>Name</th><th>#</th><th>Guide</th><th>Streams</th><th></th></tr>
+  <tr><th>Name</th><th>#</th><th>Guide</th><th>Streams</th><th>Sources</th><th></th></tr>
   {% for c in channels %}
   <tr>
     <td>{{ c.name }}{% if not c.active %} <span class="badge">off</span>{% endif %}</td>
-    <td>{{ c.number }}</td>
+    <td>
+      <form class="inline" method="post" action="/channels/set_number">
+        <input type="hidden" name="channel_id" value="{{ c.id }}">
+        <input name="number" value="{{ c.number }}" style="width:70px" title="type a number, press Enter">
+      </form>
+    </td>
     <td class="small">{% if c.gracenote_id %}<span class="badge ok">gracenote {{ c.gracenote_id }}</span>{% elif c.tvg_id %}<span class="badge">epg {{ c.tvg_id }}</span>{% else %}<span class="badge bad">none</span>{% endif %}</td>
     <td>{{ c.n_children }}</td>
+    <td class="dim small">{{ (c.srcs or '').replace(',', ', ') }}</td>
     <td><details><summary class="dim small">edit</summary>
       <form method="post" action="/channels/save">
         <input type="hidden" name="channel_id" value="{{ c.id }}">

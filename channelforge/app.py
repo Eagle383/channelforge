@@ -91,17 +91,29 @@ def sources_delete(request: Request, source_id: int = Form(...)):
 
 # ---------- channels ----------
 @app.get("/channels", response_class=HTMLResponse)
-def channels_page(request: Request, q: str = "", show: str = "all"):
+def channels_page(request: Request, q: str = "", show: str = "all", src: str = "", sort: str = "name"):
     where, params = "1=1", []
     if q:
         where += " AND c.name LIKE ?"
         params.append(f"%{q}%")
     if show == "inactive":
         where += " AND c.active = 0"
-    rows = db.q(f"""SELECT c.*, (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children
-                    FROM channels c WHERE {where} ORDER BY c.name COLLATE NOCASE""", params)
+    if src.isdigit():
+        where += """ AND EXISTS (SELECT 1 FROM source_channels sx
+                     WHERE sx.channel_id = c.id AND sx.present = 1 AND sx.source_id = ?)"""
+        params.append(int(src))
+    order = {"source": "srcs COLLATE NOCASE, c.name COLLATE NOCASE",
+             "number": "(c.number = ''), CAST(c.number AS REAL), c.name COLLATE NOCASE",
+             }.get(sort, "c.name COLLATE NOCASE")
+    rows = db.q(f"""SELECT c.*,
+                    (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children,
+                    (SELECT GROUP_CONCAT(DISTINCT s.name) FROM source_channels sc JOIN sources s ON s.id = sc.source_id
+                     WHERE sc.channel_id = c.id AND sc.present = 1) srcs
+                    FROM channels c WHERE {where} ORDER BY {order}""", params)
     total = db.q1("SELECT COUNT(*) n FROM channels")["n"]
-    return render("channels.html", request, channels=rows, q=q, show=show, total=total)
+    sources = db.q("SELECT id, name FROM sources ORDER BY priority, name")
+    return render("channels.html", request, channels=rows, q=q, show=show, total=total,
+                  sources=sources, src=src, sort=sort)
 
 
 @app.post("/channels/save")
@@ -114,6 +126,12 @@ def channels_save(request: Request, channel_id: str = Form(""), name: str = Form
     else:
         db.execute("INSERT INTO channels(name, number, gracenote_id, tvg_id, logo, grp, active) VALUES(?,?,?,?,?,?,?)", vals)
     return back(request, "saved")
+
+
+@app.post("/channels/set_number")
+def channels_set_number(request: Request, channel_id: int = Form(...), number: str = Form("")):
+    db.execute("UPDATE channels SET number = ? WHERE id = ?", (number.strip(), channel_id))
+    return back(request, "number saved")
 
 
 @app.post("/channels/delete")
