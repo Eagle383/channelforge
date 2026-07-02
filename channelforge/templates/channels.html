@@ -5,13 +5,13 @@
   <form class="inline grow" method="get">
     <input name="q" value="{{ q }}" placeholder="search name..." style="width:240px">
     <select name="show"><option value="all" {{ 'selected' if show == 'all' }}>all</option><option value="inactive" {{ 'selected' if show == 'inactive' }}>inactive only</option></select>
-    <select name="src">
-      <option value="">any source</option>
-      {% for s in sources %}<option value="{{ s.id }}" {{ 'selected' if src == s.id|string }}>{{ s.name }}</option>{% endfor %}
+    <select name="prov">
+      <option value="">any provider</option>
+      {% for p in all_provs %}<option value="{{ p }}" {{ 'selected' if prov == p }}>{{ p }}</option>{% endfor %}
     </select>
     <select name="sort">
-      <option value="name" {{ 'selected' if sort != 'source' }}>sort: name</option>
-      <option value="source" {{ 'selected' if sort == 'source' }}>sort: source</option>
+      <option value="name" {{ 'selected' if sort not in ('source', 'number') }}>sort: name</option>
+      <option value="source" {{ 'selected' if sort == 'source' }}>sort: provider</option>
       <option value="number" {{ 'selected' if sort == 'number' }}>sort: number</option>
     </select>
     <button class="quiet">Filter</button>
@@ -37,7 +37,7 @@
 </form></details>
 
 <table>
-  <tr><th>Name</th><th>#</th><th>Guide</th><th>Streams</th><th>Sources</th><th></th></tr>
+  <tr><th>Name</th><th>#</th><th>Guide</th><th>Streams</th><th>Providers</th><th></th></tr>
   {% for c in channels %}
   <tr>
     <td>{{ c.name }}{% if not c.active %} <span class="badge">off</span>{% endif %}</td>
@@ -49,7 +49,7 @@
     </td>
     <td class="small">{% if c.gracenote_id %}<span class="badge ok">gracenote {{ c.gracenote_id }}</span>{% elif c.tvg_id %}<span class="badge">epg {{ c.tvg_id }}</span>{% else %}<span class="badge bad">none</span>{% endif %}</td>
     <td>{{ c.n_children }}</td>
-    <td class="dim small">{{ (c.srcs or '').replace(',', ', ') }}</td>
+    <td class="dim small">{{ c.provs }}</td>
     <td><details><summary class="dim small">edit</summary>
       <form method="post" action="/channels/save">
         <input type="hidden" name="channel_id" value="{{ c.id }}">

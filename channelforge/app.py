@@ -91,29 +91,33 @@ def sources_delete(request: Request, source_id: int = Form(...)):
 
 # ---------- channels ----------
 @app.get("/channels", response_class=HTMLResponse)
-def channels_page(request: Request, q: str = "", show: str = "all", src: str = "", sort: str = "name"):
+def channels_page(request: Request, q: str = "", show: str = "all", prov: str = "", sort: str = "name"):
     where, params = "1=1", []
     if q:
         where += " AND c.name LIKE ?"
         params.append(f"%{q}%")
     if show == "inactive":
         where += " AND c.active = 0"
-    if src.isdigit():
-        where += """ AND EXISTS (SELECT 1 FROM source_channels sx
-                     WHERE sx.channel_id = c.id AND sx.present = 1 AND sx.source_id = ?)"""
-        params.append(int(src))
-    order = {"source": "srcs COLLATE NOCASE, c.name COLLATE NOCASE",
-             "number": "(c.number = ''), CAST(c.number AS REAL), c.name COLLATE NOCASE",
+    order = {"number": "(c.number = ''), CAST(c.number AS REAL), c.name COLLATE NOCASE",
              }.get(sort, "c.name COLLATE NOCASE")
     rows = db.q(f"""SELECT c.*,
-                    (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children,
-                    (SELECT GROUP_CONCAT(DISTINCT s.name) FROM source_channels sc JOIN sources s ON s.id = sc.source_id
-                     WHERE sc.channel_id = c.id AND sc.present = 1) srcs
+                    (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children
                     FROM channels c WHERE {where} ORDER BY {order}""", params)
+    # providers per channel from the channel-id prefix; source name when there is none (OTA)
+    provs = {}
+    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, s.name sname
+                     FROM source_channels sc JOIN sources s ON s.id = sc.source_id
+                     WHERE sc.present = 1 AND sc.channel_id IS NOT NULL"""):
+        provs.setdefault(k["cid"], set()).add(m3u.provider_of(k["ext"]) or k["sname"])
+    all_provs = sorted({p for ps in provs.values() for p in ps}, key=str.casefold)
+    rows = [dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold))) for r in rows]
+    if prov:
+        rows = [r for r in rows if prov in provs.get(r["id"], ())]
+    if sort == "source":
+        rows.sort(key=lambda r: (r["provs"].casefold(), r["name"].casefold()))
     total = db.q1("SELECT COUNT(*) n FROM channels")["n"]
-    sources = db.q("SELECT id, name FROM sources ORDER BY priority, name")
     return render("channels.html", request, channels=rows, q=q, show=show, total=total,
-                  sources=sources, src=src, sort=sort)
+                  all_provs=all_provs, prov=prov, sort=sort)
 
 
 @app.post("/channels/save")
