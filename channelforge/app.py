@@ -88,7 +88,7 @@ def channels_page(request: Request, q: str = "", show: str = "all"):
     if show == "inactive":
         where += " AND c.active = 0"
     rows = db.q(f"""SELECT c.*, (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children
-                    FROM channels c WHERE {where} ORDER BY c.name COLLATE NOCASE LIMIT 500""", params)
+                    FROM channels c WHERE {where} ORDER BY c.name COLLATE NOCASE""", params)
     total = db.q1("SELECT COUNT(*) n FROM channels")["n"]
     return render("channels.html", request, channels=rows, q=q, show=show, total=total)
 
@@ -127,7 +127,7 @@ def assign_page(request: Request, q: str = "", show: str = "unassigned"):
     rows = db.q(f"""SELECT sc.*, s.name AS source_name, c.name AS channel_name
                     FROM source_channels sc JOIN sources s ON s.id = sc.source_id
                     LEFT JOIN channels c ON c.id = sc.channel_id
-                    WHERE {where} ORDER BY sc.name COLLATE NOCASE LIMIT 500""", params)
+                    WHERE {where} ORDER BY sc.name COLLATE NOCASE""", params)
     counts = {
         "unassigned": db.q1("SELECT COUNT(*) n FROM source_channels WHERE present=1 AND channel_id IS NULL AND ignored=0")["n"],
         "ignored": db.q1("SELECT COUNT(*) n FROM source_channels WHERE present=1 AND ignored=1")["n"],
@@ -136,11 +136,27 @@ def assign_page(request: Request, q: str = "", show: str = "unassigned"):
     return render("assign.html", request, rows=rows, q=q, show=show, counts=counts)
 
 
+def _auto_rule(sc_name, action, target_id):
+    """Create an equals rule mirroring a manual assign/ignore, then re-run rules
+    so every other copy of the channel follows immediately."""
+    if not sc_name or db.q1("SELECT id FROM rules WHERE match_field = 'name' AND match_type = 'equals' AND pattern = ?", (sc_name,)):
+        return ""
+    db.execute("INSERT INTO rules(name, priority, active, match_field, match_type, pattern, action, target_channel_id, set_field, set_value) VALUES(?,?,?,?,?,?,?,?,?,?)",
+               (f"auto: {sc_name}", 100, 1, "name", "equals", sc_name, action, target_id, "", ""))
+    assigned, ignored = rules.apply_all()
+    return f"; rule created ({assigned} more assigned, {ignored} ignored)"
+
+
 @app.post("/assign/set")
 def assign_set(request: Request, sc_id: int = Form(...), target: str = Form("")):
     target = target.strip()
+    sc = db.q1("SELECT name FROM source_channels WHERE id = ?", (sc_id,))
+    auto = db.get_setting("auto_rule_on_assign") == "1" and sc is not None
+    extra = ""
     if target.casefold() == "ignore":
         db.execute("UPDATE source_channels SET ignored = 1, channel_id = NULL WHERE id = ?", (sc_id,))
+        if auto:
+            extra = _auto_rule(sc["name"], "ignore", None)
     elif not target:
         db.execute("UPDATE source_channels SET ignored = 0, channel_id = NULL WHERE id = ?", (sc_id,))
     else:
@@ -152,7 +168,9 @@ def assign_set(request: Request, sc_id: int = Form(...), target: str = Form(""))
         else:
             cid = row["id"]
         db.execute("UPDATE source_channels SET channel_id = ?, ignored = 0 WHERE id = ?", (cid, sc_id))
-    return back(request, "updated")
+        if auto:
+            extra = _auto_rule(sc["name"], "assign", cid)
+    return back(request, "updated" + extra)
 
 
 # ---------- rules ----------
@@ -165,7 +183,7 @@ def rules_page(request: Request, q: str = ""):
     rows = db.q(f"""SELECT r.*, s.name AS source_name, c.name AS target_name
                     FROM rules r LEFT JOIN sources s ON s.id = r.source_id
                     LEFT JOIN channels c ON c.id = r.target_channel_id
-                    WHERE {where} ORDER BY r.priority, r.id LIMIT 500""", params)
+                    WHERE {where} ORDER BY r.priority, r.id""", params)
     total = db.q1("SELECT COUNT(*) n FROM rules")["n"]
     return render("rules.html", request, rules=rows, q=q, total=total,
                   match_fields=rules.MATCH_FIELDS, match_types=rules.MATCH_TYPES, set_fields=rules.SET_FIELDS)

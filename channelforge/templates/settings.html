@@ -19,6 +19,15 @@
     <label>External base URL of this app (blank = auto) <input name="base_url" value="{{ s['base_url'] }}" placeholder="http://192.168.1.10:5100"></label>
     <label>Auto-number channels starting at (blank = keep source numbers; saved onto each channel, OTA x.y numbers kept) <input name="output_start_number" value="{{ s['output_start_number'] }}" placeholder="1000"></label>
   </div>
+  <h2>Assignments</h2>
+  <div class="grid">
+    <label>Manual assign/ignore also creates a matching rule
+      <select name="auto_rule_on_assign">
+        <option value="1" {{ 'selected' if s['auto_rule_on_assign'] != '0' }}>On</option>
+        <option value="0" {{ 'selected' if s['auto_rule_on_assign'] == '0' }}>Off</option>
+      </select>
+    </label>
+  </div>
   <h2>Health checks</h2>
   <div class="grid">
     <label>Mark unhealthy after N consecutive fails <input name="health_fail_threshold" type="number" value="{{ s['health_fail_threshold'] }}"></label>

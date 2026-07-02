@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Rules <span class="dim small">({{ total }} total, showing up to 500)</span></h1>
+<h1>Rules <span class="dim small">({{ rules|length }} shown of {{ total }})</span></h1>
 <div class="bar">
   <form class="inline grow" method="get">
     <input name="q" value="{{ q }}" placeholder="search name or pattern..." style="width:280px">
