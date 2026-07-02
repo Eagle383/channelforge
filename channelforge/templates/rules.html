@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Rules <span class="dim small">({{ total }} total, showing up to 500)</span></h1>
+<div class="bar">
+  <form class="inline grow" method="get">
+    <input name="q" value="{{ q }}" placeholder="search name or pattern..." style="width:280px">
+    <button class="quiet">Filter</button>
+  </form>
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="apply_rules"><button {{ 'disabled' if running }}>Apply rules now</button></form>
+  <a class="btn quiet" href="/export/rules.csv">Export CSV</a>
+  <form class="inline" method="post" action="/import/rules" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv" required><button class="quiet">Import CSV</button>
+  </form>
+</div>
+<p class="dim small">Rules run in priority order on every refresh. <b>equals</b> rules use an O(1) index — use them freely at any scale; <b>regex</b> is fully supported for the fuzzy cases.</p>
+
+<details class="editor"><summary>+ Add rule</summary>
+<form method="post" action="/rules/save">
+  <div class="grid">
+    <label>Name <input name="name"></label>
+    <label>Priority <input name="priority" type="number" value="100"></label>
+    <label>Field <select name="match_field">{% for f in match_fields %}<option>{{ f }}</option>{% endfor %}</select></label>
+    <label>Match <select name="match_type">{% for t in match_types %}<option>{{ t }}</option>{% endfor %}</select></label>
+    <label>Pattern <input name="pattern" required></label>
+    <label>Action <select name="action"><option>assign</option><option>ignore</option><option>set_field</option></select></label>
+    <label>Target channel (for assign) <input name="target"></label>
+    <label>Set field / value (for set_field) <span style="display:flex;gap:4px"><select name="set_field"><option value=""></option>{% for f in set_fields %}<option>{{ f }}</option>{% endfor %}</select><input name="set_value"></span></label>
+    <label>Active <input type="checkbox" name="active" checked></label>
+    <label>&nbsp;<button>Save</button></label>
+  </div>
+</form></details>
+
+<table>
+  <tr><th>Pri</th><th>Name</th><th>When</th><th>Action</th><th></th></tr>
+  {% for r in rules %}
+  <tr>
+    <td>{{ r.priority }}</td>
+    <td>{{ r.name }}{% if not r.active %} <span class="badge">off</span>{% endif %}{% if r.source_name %}<br><span class="dim small">only: {{ r.source_name }}</span>{% endif %}</td>
+    <td class="small">{{ r.match_field }} <b>{{ r.match_type }}</b> <code>{{ r.pattern }}</code></td>
+    <td class="small">{% if r.action == 'assign' %}assign → {{ r.target_name }}{% elif r.action == 'ignore' %}<span class="badge">ignore</span>{% else %}set {{ r.set_field }} = {{ r.set_value }}{% endif %}</td>
+    <td><details><summary class="dim small">edit</summary>
+      <form method="post" action="/rules/save">
+        <input type="hidden" name="rule_id" value="{{ r.id }}">
+        <div class="grid">
+          <label>Name <input name="name" value="{{ r.name }}"></label>
+          <label>Priority <input name="priority" type="number" value="{{ r.priority }}"></label>
+          <label>Field <select name="match_field">{% for f in match_fields %}<option {{ 'selected' if f == r.match_field }}>{{ f }}</option>{% endfor %}</select></label>
+          <label>Match <select name="match_type">{% for t in match_types %}<option {{ 'selected' if t == r.match_type }}>{{ t }}</option>{% endfor %}</select></label>
+          <label>Pattern <input name="pattern" value="{{ r.pattern }}"></label>
+          <label>Action <select name="action"><option {{ 'selected' if r.action == 'assign' }}>assign</option><option {{ 'selected' if r.action == 'ignore' }}>ignore</option><option {{ 'selected' if r.action == 'set_field' }}>set_field</option></select></label>
+          <label>Target <input name="target" value="{{ r.target_name or '' }}"></label>
+          <label>Set field/value <span style="display:flex;gap:4px"><select name="set_field"><option value=""></option>{% for f in set_fields %}<option {{ 'selected' if f == r.set_field }}>{{ f }}</option>{% endfor %}</select><input name="set_value" value="{{ r.set_value }}"></span></label>
+          <label>Active <input type="checkbox" name="active" {{ 'checked' if r.active }}></label>
+          <label>&nbsp;<span><button>Save</button></span></label>
+        </div>
+      </form>
+      <form class="inline" method="post" action="/rules/delete" onsubmit="return confirm('Delete rule?')">
+        <input type="hidden" name="rule_id" value="{{ r.id }}"><button class="danger small">Delete</button>
+      </form>
+    </details></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

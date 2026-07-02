@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>channelforge</title>
+<link rel="stylesheet" href="/static/cf.css">
+</head>
+<body>
+<nav>
+  <span class="brand">⚒ channelforge</span>
+  {% for item in [('/', 'Dashboard'), ('/sources', 'Sources'), ('/channels', 'Channels'), ('/assign', 'Assign'), ('/rules', 'Rules'), ('/outputs', 'Outputs'), ('/jobs', 'Jobs'), ('/migrate', 'Migrate'), ('/settings', 'Settings')] %}
+    <a href="{{ item[0] }}" class="{{ 'on' if page == (item[0].strip('/') or 'dashboard') }}">{{ item[1] }}</a>
+  {% endfor %}
+  <span class="right">
+    {% if running %}<span class="badge run">job running: {{ running['type'] }}</span>{% endif %}
+    <span class="ver">v{{ version }}</span>
+  </span>
+</nav>
+{% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

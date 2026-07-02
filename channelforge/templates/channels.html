@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Channels <span class="dim small">({{ total }} total, showing up to 500)</span></h1>
+<div class="bar">
+  <form class="inline grow" method="get">
+    <input name="q" value="{{ q }}" placeholder="search name..." style="width:240px">
+    <select name="show"><option value="all" {{ 'selected' if show == 'all' }}>all</option><option value="inactive" {{ 'selected' if show == 'inactive' }}>inactive only</option></select>
+    <button class="quiet">Filter</button>
+  </form>
+  <a class="btn quiet" href="/export/channels.csv">Export CSV</a>
+  <form class="inline" method="post" action="/import/channels" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv" required><button class="quiet">Import CSV</button>
+  </form>
+</div>
+
+<details class="editor"><summary>+ Add channel</summary>
+<form method="post" action="/channels/save">
+  <div class="grid">
+    <label>Name <input name="name" required></label>
+    <label>Number <input name="number"></label>
+    <label>Gracenote ID <input name="gracenote_id"></label>
+    <label>tvg-id (EPG) <input name="tvg_id"></label>
+    <label>Logo URL <input name="logo"></label>
+    <label>Group <input name="grp"></label>
+    <label>Active <input type="checkbox" name="active" checked></label>
+    <label>&nbsp;<button>Save</button></label>
+  </div>
+</form></details>
+
+<table>
+  <tr><th>Name</th><th>#</th><th>Guide</th><th>Streams</th><th></th></tr>
+  {% for c in channels %}
+  <tr>
+    <td>{{ c.name }}{% if not c.active %} <span class="badge">off</span>{% endif %}</td>
+    <td>{{ c.number }}</td>
+    <td class="small">{% if c.gracenote_id %}<span class="badge ok">gracenote {{ c.gracenote_id }}</span>{% elif c.tvg_id %}<span class="badge">epg {{ c.tvg_id }}</span>{% else %}<span class="badge bad">none</span>{% endif %}</td>
+    <td>{{ c.n_children }}</td>
+    <td><details><summary class="dim small">edit</summary>
+      <form method="post" action="/channels/save">
+        <input type="hidden" name="channel_id" value="{{ c.id }}">
+        <div class="grid">
+          <label>Name <input name="name" value="{{ c.name }}"></label>
+          <label>Number <input name="number" value="{{ c.number }}"></label>
+          <label>Gracenote ID <input name="gracenote_id" value="{{ c.gracenote_id }}"></label>
+          <label>tvg-id <input name="tvg_id" value="{{ c.tvg_id }}"></label>
+          <label>Logo <input name="logo" value="{{ c.logo }}"></label>
+          <label>Group <input name="grp" value="{{ c.grp }}"></label>
+          <label>Active <input type="checkbox" name="active" {{ 'checked' if c.active }}></label>
+          <label>&nbsp;<span><button>Save</button></span></label>
+        </div>
+      </form>
+      <form class="inline" method="post" action="/channels/delete" onsubmit="return confirm('Delete channel?')">
+        <input type="hidden" name="channel_id" value="{{ c.id }}"><button class="danger small">Delete</button>
+      </form>
+    </details></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

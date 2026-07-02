@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="cards">
+  <div class="card"><div class="n">{{ stats.sources }}</div><div class="l">active sources</div></div>
+  <div class="card"><div class="n">{{ stats.channels }}</div><div class="l">lineup channels</div></div>
+  <div class="card"><div class="n">{{ stats.children }}</div><div class="l">source channels</div></div>
+  <div class="card {{ 'warn' if stats.unassigned }}"><div class="n">{{ stats.unassigned }}</div><div class="l">unassigned</div></div>
+  <div class="card {{ 'bad' if stats.unhealthy }}"><div class="n">{{ stats.unhealthy }}</div><div class="l">unhealthy streams</div></div>
+  <div class="card"><div class="n small" style="font-size:15px; padding-top:6px">{{ stats.dvr }}</div><div class="l">Channels DVR</div></div>
+</div>
+
+<div class="bar">
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="refresh"><button {{ 'disabled' if running }}>Refresh sources &amp; outputs</button></form>
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="health"><button class="quiet" {{ 'disabled' if running }}>Check stream health</button></form>
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="reset_passes"><button class="quiet" {{ 'disabled' if running }}>Reset DVR passes</button></form>
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="refresh_dvr_m3u"><button class="quiet" {{ 'disabled' if running }}>Refresh DVR m3u</button></form>
+</div>
+
+{% if recent %}
+<h2>Latest job log <span class="dim small">#{{ recent[0].id }} {{ recent[0].type }}{{ ' — live' if running }}</span></h2>
+<pre id="tail" class="log" data-job="{{ recent[0].id }}" data-live="{{ 1 if running else 0 }}">loading...</pre>
+<script>
+const tail = document.getElementById('tail');
+async function poll() {
+  const text = await (await fetch('/jobs/' + tail.dataset.job + '/log')).text();
+  const atBottom = tail.scrollHeight - tail.scrollTop - tail.clientHeight < 40;
+  tail.textContent = text;
+  if (atBottom) tail.scrollTop = tail.scrollHeight;
+  if (text.includes('[running...]')) setTimeout(poll, 2000);
+  else if (tail.dataset.live === '1') location.reload();   // job just finished: refresh stats + buttons
+}
+poll();
+</script>
+{% endif %}
+
+<h2>Recent jobs</h2>
+<table>
+  <tr><th>#</th><th>Type</th><th>Status</th><th>Started</th><th>Finished</th><th></th></tr>
+  {% for j in recent %}
+  <tr>
+    <td>{{ j.id }}</td><td>{{ j.type }}</td>
+    <td><span class="badge {{ 'ok' if j.status == 'done' else ('bad' if j.status == 'failed' else 'run') }}">{{ j.status }}</span></td>
+    <td class="dim small">{{ j.started }}</td><td class="dim small">{{ j.finished }}</td>
+    <td><a class="btn quiet small" href="/jobs/{{ j.id }}/log">log</a></td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="dim">No jobs yet — add sources (or use Migrate to import legacy data), then hit Refresh.</td></tr>{% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Sources</h1>
+<details class="editor"><summary>+ Add source</summary>
+<form method="post" action="/sources/save">
+  <div class="grid">
+    <label>Name <input name="name" required></label>
+    <label>M3U URL <input name="url" required></label>
+    <label>EPG (XMLTV) URL <input name="epg_url"></label>
+    <label>Stream format <select name="stream_format"><option>HLS</option><option>MPEG-TS</option></select></label>
+    <label>Priority (lower wins) <input name="priority" type="number" value="100"></label>
+    <label>Active <input type="checkbox" name="active" checked></label>
+    <label>Health-check streams <input type="checkbox" name="check_streams"></label>
+    <label>&nbsp;<button>Save</button></label>
+  </div>
+</form></details>
+
+<table>
+  <tr><th>Pri</th><th>Name</th><th>Channels</th><th>Format</th><th>Checks</th><th>Last fetch</th><th>Status</th><th></th></tr>
+  {% for s in sources %}
+  <tr>
+    <td>{{ s.priority }}</td>
+    <td>{{ s.name }}{% if not s.active %} <span class="badge">off</span>{% endif %}<br><span class="dim small">{{ s.url[:80] }}</span></td>
+    <td>{{ s.n }}</td><td>{{ s.stream_format }}</td>
+    <td>{{ 'on' if s.check_streams else '—' }}</td>
+    <td class="dim small">{{ s.last_fetched }}</td>
+    <td class="small">{{ s.last_status }}</td>
+    <td>
+      <details><summary class="dim small">edit</summary>
+      <form method="post" action="/sources/save">
+        <input type="hidden" name="source_id" value="{{ s.id }}">
+        <div class="grid">
+          <label>Name <input name="name" value="{{ s.name }}"></label>
+          <label>M3U URL <input name="url" value="{{ s.url }}"></label>
+          <label>EPG URL <input name="epg_url" value="{{ s.epg_url }}"></label>
+          <label>Format <select name="stream_format"><option {{ 'selected' if s.stream_format == 'HLS' }}>HLS</option><option {{ 'selected' if s.stream_format == 'MPEG-TS' }}>MPEG-TS</option></select></label>
+          <label>Priority <input name="priority" type="number" value="{{ s.priority }}"></label>
+          <label>Active <input type="checkbox" name="active" {{ 'checked' if s.active }}></label>
+          <label>Health-check <input type="checkbox" name="check_streams" {{ 'checked' if s.check_streams }}></label>
+          <label>&nbsp;<span><button>Save</button></span></label>
+        </div>
+      </form>
+      <form class="inline" method="post" action="/sources/delete" onsubmit="return confirm('Delete source and all its channels?')">
+        <input type="hidden" name="source_id" value="{{ s.id }}"><button class="danger small">Delete</button>
+      </form>
+      </details>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

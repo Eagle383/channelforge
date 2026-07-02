@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Jobs</h1>
+<div class="bar">
+  {% for t in ['refresh', 'apply_rules', 'health', 'reset_passes', 'refresh_dvr_m3u'] %}
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="{{ t }}"><button class="quiet" {{ 'disabled' if running }}>{{ t }}</button></form>
+  {% endfor %}
+</div>
+<table>
+  <tr><th>#</th><th>Type</th><th>Status</th><th>Started</th><th>Finished</th><th></th></tr>
+  {% for j in jobs %}
+  <tr>
+    <td>{{ j.id }}</td><td>{{ j.type }}</td>
+    <td><span class="badge {{ 'ok' if j.status == 'done' else ('bad' if j.status == 'failed' else 'run') }}">{{ j.status }}</span></td>
+    <td class="dim small">{{ j.started }}</td><td class="dim small">{{ j.finished }}</td>
+    <td><a class="btn quiet small" href="/jobs/{{ j.id }}/log">log</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

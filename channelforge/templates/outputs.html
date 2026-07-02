@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Outputs</h1>
+<p class="dim small">Point Channels DVR custom channel sources at these URLs. Gracenote lineups use built-in guide data; EPG lineups pair with the combined guide XML.</p>
+{% if files %}
+<div class="bar">
+  <form class="inline" method="post" action="/outputs/add_to_dvr"><button>Add all to Channels DVR</button></form>
+  <span class="dim small">Creates or updates a custom channels source in Channels DVR for each M3U below (EPG lineups get the combined guide attached). Channels DVR must be able to reach the URLs shown — set the external base URL in Settings if they look wrong.</span>
+</div>
+{% endif %}
+<table>
+  <tr><th>File</th><th>URL for Channels DVR</th></tr>
+  {% for f in files %}
+  <tr><td>{{ f }}</td><td><code>{{ base }}/out/{{ f }}</code></td></tr>
+  {% else %}<tr><td colspan="2" class="dim">No outputs yet — run a Refresh first.</td></tr>{% endfor %}
+</table>
+{% endblock %}

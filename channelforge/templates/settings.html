@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Settings</h1>
+<form method="post" action="/settings">
+  <h2>Channels DVR</h2>
+  <div class="grid">
+    <label>Server URL(s), comma-separated for multiple <input name="channels_dvr_url" value="{{ s['channels_dvr_url'] }}" placeholder="http://192.168.1.10:8089, http://192.168.1.20:8089"></label>
+    <label>Status <span class="badge {{ 'ok' if 'ok' in dvr_status and 'error' not in dvr_status and 'unreachable' not in dvr_status else 'bad' }}">{{ dvr_status }}</span></label>
+    <label>Push outputs to DVR after each refresh
+      <select name="push_outputs_to_dvr">
+        <option value="0" {{ 'selected' if s['push_outputs_to_dvr'] != '1' }}>Off</option>
+        <option value="1" {{ 'selected' if s['push_outputs_to_dvr'] == '1' }}>On</option>
+      </select>
+    </label>
+  </div>
+  <h2>Outputs</h2>
+  <div class="grid">
+    <label>Max channels per m3u <input name="output_max_per_m3u" type="number" value="{{ s['output_max_per_m3u'] }}"></label>
+    <label>External base URL of this app (blank = auto) <input name="base_url" value="{{ s['base_url'] }}" placeholder="http://192.168.1.10:5100"></label>
+    <label>Auto-number channels starting at (blank = keep source numbers; saved onto each channel, OTA x.y numbers kept) <input name="output_start_number" value="{{ s['output_start_number'] }}" placeholder="1000"></label>
+  </div>
+  <h2>Health checks</h2>
+  <div class="grid">
+    <label>Mark unhealthy after N consecutive fails <input name="health_fail_threshold" type="number" value="{{ s['health_fail_threshold'] }}"></label>
+    <label>Concurrency <input name="health_concurrency" type="number" value="{{ s['health_concurrency'] }}"></label>
+  </div>
+  <h2>Daily schedule (HH:MM, 24h; blank = off)</h2>
+  <div class="grid">
+    <label>Refresh sources &amp; outputs <input name="schedule.refresh" value="{{ s['schedule.refresh'] }}" placeholder="03:30"></label>
+    <label>Stream health checks <input name="schedule.health" value="{{ s['schedule.health'] }}" placeholder="04:30"></label>
+    <label>Reset DVR passes <input name="schedule.reset_passes" value="{{ s['schedule.reset_passes'] }}" placeholder="05:00"></label>
+    <label>Refresh DVR m3u sources <input name="schedule.refresh_dvr_m3u" value="{{ s['schedule.refresh_dvr_m3u'] }}" placeholder="05:10"></label>
+  </div>
+  <p><button>Save settings</button></p>
+</form>
+{% endblock %}

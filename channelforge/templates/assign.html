@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Assign source channels</h1>
+<div class="bar">
+  <form class="inline grow" method="get">
+    <input name="q" value="{{ q }}" placeholder="search name..." style="width:240px">
+    <select name="show">
+      <option value="unassigned" {{ 'selected' if show == 'unassigned' }}>unassigned ({{ counts.unassigned }})</option>
+      <option value="ignored" {{ 'selected' if show == 'ignored' }}>ignored ({{ counts.ignored }})</option>
+      <option value="unhealthy" {{ 'selected' if show == 'unhealthy' }}>unhealthy</option>
+      <option value="all" {{ 'selected' if show == 'all' }}>all ({{ counts.all }})</option>
+    </select>
+    <button class="quiet">Filter</button>
+  </form>
+  <a class="btn quiet" href="/export/assignments.csv">Export CSV</a>
+  <form class="inline" method="post" action="/import/assignments" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv" required><button class="quiet">Import CSV</button>
+  </form>
+</div>
+<p class="dim small">Type a channel name to assign (creates the channel if new), <b>Ignore</b> to ignore, or leave blank to unassign. Bulk edits: export CSV, edit, import back.</p>
+<table>
+  <tr><th>Source</th><th>Channel in source</th><th>Assigned to</th><th>Health</th><th>Set</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td class="dim small">{{ r.source_name }}</td>
+    <td>{{ r.name }}<br><span class="dim small">{{ r.external_id }}</span></td>
+    <td>{% if r.ignored %}<span class="badge">ignored</span>{% elif r.channel_name %}{{ r.channel_name }}{% else %}<span class="badge bad">unassigned</span>{% endif %}</td>
+    <td>{% if not r.healthy %}<span class="badge bad">down ({{ r.fail_count }})</span>{% elif r.last_checked %}<span class="badge ok">ok</span>{% else %}<span class="dim small">—</span>{% endif %}</td>
+    <td>
+      <form class="inline" method="post" action="/assign/set">
+        <input type="hidden" name="sc_id" value="{{ r.id }}">
+        <input name="target" value="{{ 'Ignore' if r.ignored else (r.channel_name or '') }}" placeholder="channel name / Ignore" style="width:200px">
+        <button class="quiet small">Apply</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="dim">Nothing here.</td></tr>{% endfor %}
+</table>
+{% endblock %}
