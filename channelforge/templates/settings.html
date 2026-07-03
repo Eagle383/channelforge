@@ -42,8 +42,8 @@
   </div>
   <h2>Pre-refresh hook</h2>
   <div class="grid">
-    <label>URL to POST before each refresh, so the upstream source rebuilds first (blank = off; e.g. FastChannels force-refresh)
-      <input name="prerefresh_url" value="{{ s['prerefresh_url'] }}" placeholder="http://192.168.1.10:5523/api/sources/force-refresh"></label>
+    <label>FastChannels server address — its force-refresh is POSTed before each refresh so the feeds rebuild first (blank = off; a full URL to any other hook works too)
+      <input name="prerefresh_url" value="{{ s['prerefresh_url'] }}" placeholder="192.168.1.10:5523"></label>
     <label>Minutes to wait after the hook before fetching sources
       <input name="prerefresh_wait_min" type="number" value="{{ s['prerefresh_wait_min'] }}" placeholder="30"></label>
   </div>

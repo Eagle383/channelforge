@@ -66,7 +66,7 @@ Ten minutes, start to finish:
 | Manual assign/ignore creates a rule | Assign page actions also insert the matching equals rule (default on) |
 | Auto-assign by normalized name | Unmatched source channels attach to channels by collapsed-name match (default on) |
 | Auto-create channels | Create the channel when nothing matches — hands-off lineup building (default off) |
-| Pre-refresh hook URL | POSTed before each refresh so an upstream source can rebuild first (e.g. a FastChannels force-refresh endpoint); blank = off |
+| Pre-refresh hook | Address of a FastChannels server (its force-refresh endpoint is filled in for you) or any full hook URL; POSTed before each refresh so the upstream source rebuilds first. Blank = off |
 | Pre-refresh wait | Minutes to wait after the hook before fetching sources |
 | Health: fail threshold | Consecutive failed checks before a stream is marked unhealthy |
 | Health: concurrency | Parallel stream checks |

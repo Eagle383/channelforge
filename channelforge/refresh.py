@@ -213,8 +213,12 @@ def build_outputs(log=lambda s: None):
 
 
 def run_refresh(log=lambda s: None):
-    hook = (db.get_setting("prerefresh_url") or "").strip()
+    hook = (db.get_setting("prerefresh_url") or "").strip().rstrip("/")
     if hook:
+        if not hook.startswith(("http://", "https://")):
+            hook = "http://" + hook
+        if not httpx.URL(hook).path.strip("/"):   # bare server address = FastChannels
+            hook += "/api/sources/force-refresh"
         try:
             with httpx.Client(timeout=30) as client:
                 r = client.post(hook)
