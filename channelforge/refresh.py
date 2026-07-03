@@ -139,7 +139,8 @@ def build_outputs(log=lambda s: None):
         attrs = dict(child_attrs)
         attrs["channel-id"] = f"cf-{ch['id']}"
         number = ch["number"]
-        inherited = child_attrs.get("channel-number", "") or child_attrs.get("tvg-chno", "")
+        inherited = (m3u.ota_number_of(best["external_id"])
+                     or child_attrs.get("channel-number", "") or child_attrs.get("tvg-chno", ""))
         if not number:
             if auto_no is not None and "." not in inherited:   # dotted = real OTA number, keep it
                 number = str(auto_no)

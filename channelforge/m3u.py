@@ -4,6 +4,7 @@ import re
 
 _ATTR_RE = re.compile(r'([a-zA-Z0-9\-]+)="([^"]*)"')
 _PROVIDER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*)\.")
+_OTA_NUM_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*\.(\d+(?:\.\d+)+)$")
 
 
 def provider_of(external_id):
@@ -14,6 +15,15 @@ def provider_of(external_id):
     """
     m = _PROVIDER_RE.match(external_id or "")
     return m.group(1).lower() if m else ""
+
+
+def ota_number_of(external_id):
+    """Dotted OTA channel number embedded in a combined-feed id
+    ("hdhomerun.4.7" -> "4.7"). Combined feeds renumber everything with a
+    synthetic tvg-chno, so the id is where the tuner's real number survives.
+    """
+    m = _OTA_NUM_RE.match(external_id or "")
+    return m.group(1) if m else ""
 
 # EXTINF attribute names Channels DVR understands, in output order
 CHANNELS_ATTRS = [
