@@ -27,6 +27,12 @@
         <option value="0" {{ 'selected' if s['auto_rule_on_assign'] == '0' }}>Off</option>
       </select>
     </label>
+    <label>Auto-matches create an editable rule on the Rules page
+      <select name="auto_rule_on_match">
+        <option value="1" {{ 'selected' if s['auto_rule_on_match'] != '0' }}>On</option>
+        <option value="0" {{ 'selected' if s['auto_rule_on_match'] == '0' }}>Off</option>
+      </select>
+    </label>
     <label>Auto-assign by normalized name ("123 GO!" = "123GO!")
       <select name="auto_assign_normalized">
         <option value="1" {{ 'selected' if s['auto_assign_normalized'] != '0' }}>On</option>

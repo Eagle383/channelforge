@@ -148,10 +148,16 @@ def apply_all(log=lambda s: None):
     the providers call it), then normalized-name matching against existing
     channels (and optionally auto-create a channel when nothing matches).
     Ignore rules always win.
+
+    Assignments the rules didn't produce (fallthrough matches, imports,
+    pre-rule history) are materialized as `auto:` equals rules
+    (`auto_rule_on_match`, default on) so every mapping is visible and
+    tweakable on the Rules page.
     """
     engine = load_engine()
     auto_match = db.get_setting("auto_assign_normalized") != "0"
     auto_create = db.get_setting("auto_create_channels") == "1"
+    auto_rule = db.get_setting("auto_rule_on_match") != "0"
     by_norm, by_alias, by_station = {}, {}, {}
     if auto_match:
         # prefer curated (numbered) channels, then oldest, when variants collide
@@ -161,6 +167,7 @@ def apply_all(log=lambda s: None):
             if ch["gracenote_id"]:
                 by_station.setdefault(ch["gracenote_id"], ch["id"])
     rows = db.q("SELECT * FROM source_channels WHERE present = 1")
+    new_rules = {}     # child name -> channel id, materialized as `auto:` rules
     sid_of_name = {}   # normalized name -> station id, so a sid-less EPG child
     if auto_match:     # can borrow the sid its gracenote-feed twin carries
         for row in rows:
@@ -203,6 +210,12 @@ def apply_all(log=lambda s: None):
                     by_station.setdefault(sid, cid)
                 new_channel = cid
                 matched += 1
+        # assignment exists but no rule produced it (fallthrough / import /
+        # pre-rule history) -> pin it as a visible, editable equals rule
+        if (auto_rule and new_channel is not None and not new_ignored and assign is None
+                and sc["name"] and ("name", sc["name"]) not in engine.exact):
+            new_rules.setdefault(sc["name"], new_channel)
+
         new_name = sc["name"]
         if changed:
             changed_n += 1
@@ -211,8 +224,14 @@ def apply_all(log=lambda s: None):
 
     if updates:
         db.executemany("UPDATE source_channels SET channel_id = ?, ignored = ?, name = ? WHERE id = ?", updates)
+    if new_rules:
+        db.executemany(
+            "INSERT INTO rules(name, priority, active, match_field, match_type, pattern, action, target_channel_id) VALUES(?,100,1,'name','equals',?,'assign',?)",
+            [(f"auto: {n}", n, cid) for n, cid in new_rules.items()])
     msg = f"rules: {assigned} assigned, {ignored_n} ignored, {changed_n} field changes"
     if auto_match:
         msg += f"; name-match: {matched} assigned, {created} channels created"
+    if new_rules:
+        msg += f"; {len(new_rules)} auto rules pinned"
     log(msg)
     return assigned + matched, ignored_n
