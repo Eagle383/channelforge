@@ -52,7 +52,7 @@ Ten minutes, start to finish:
 
 **Outputs.** Channels with a Gracenote station ID land in the *gracenote* M3Us (the DVR's own guide data); everything else lands in the *epg* M3Us paired with the combined XMLTV guide, filtered to only the channels you actually use. Each group is further split by stream format and chunked (default 1200 channels per file) because Channels DVR handles several medium playlists better than one giant one.
 
-**Channel numbers.** A number you set manually (editable inline on the Channels page) always wins. Otherwise, set *auto-number starting at* to number every channel sequentially from your chosen base; dotted OTA numbers like `7.1` are kept as-is, and with auto-numbering off channels keep their source-supplied numbers. Whatever number a channel actually uses is saved onto it at refresh, so numbers are always visible, editable, and stable across refreshes and updates.
+**Channel numbers.** A number you set manually (editable inline on the Channels page) always wins. Otherwise, set *auto-number starting at* to number every channel sequentially from your chosen base; dotted OTA numbers like `7.1` are kept as-is — even when a combined feed hides them inside the channel id (`hdhomerun.4.7`) and renumbers the entry itself — and with auto-numbering off channels keep their source-supplied numbers. Whatever number a channel actually uses is saved onto it at refresh, so numbers are always visible, editable, and stable across refreshes and updates.
 
 ## Settings reference
 
