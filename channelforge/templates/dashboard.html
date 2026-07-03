@@ -12,6 +12,7 @@
 
 <div class="bar">
   <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="refresh"><button {{ 'disabled' if running }}>Refresh sources &amp; outputs</button></form>
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="quick_refresh"><button class="quiet" {{ 'disabled' if running }} title="Re-download the source files as they are and rebuild — skips the pre-refresh hook, so the feed server isn't forced to rescrape">Quick refresh (skip hook)</button></form>
   <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="health"><button class="quiet" {{ 'disabled' if running }}>Check stream health</button></form>
   <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="reset_passes"><button class="quiet" {{ 'disabled' if running }}>Reset DVR passes</button></form>
   <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="refresh_dvr_m3u"><button class="quiet" {{ 'disabled' if running }}>Refresh DVR m3u</button></form>

@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Sources</h1>
+<div class="bar">
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="quick_refresh"><button class="quiet" {{ 'disabled' if running }} title="Re-download the source files as they are and rebuild — skips the pre-refresh hook, so the feed server isn't forced to rescrape">Quick refresh (skip hook)</button></form>
+</div>
 <details class="editor"><summary>+ Add source</summary>
 <form method="post" action="/sources/save">
   <div class="grid">

@@ -306,8 +306,17 @@ def _run_prerefresh_hook(log):
         log(f"pre-refresh hook: gave up waiting on {len(pending)} sources; continuing")
 
 
-def run_refresh(log=lambda s: None):
-    _run_prerefresh_hook(log)
+def run_quick_refresh(log=lambda s: None):
+    """Re-pull the source files as they are now — no pre-refresh hook, so the
+    upstream feed server isn't forced to rebuild first."""
+    run_refresh(log, skip_hook=True)
+
+
+def run_refresh(log=lambda s: None, skip_hook=False):
+    if skip_hook:
+        log("quick refresh: skipping the pre-refresh hook")
+    else:
+        _run_prerefresh_hook(log)
     log("refreshing sources...")
     total = 0
     for source in db.q("SELECT * FROM sources WHERE active = 1 ORDER BY priority"):

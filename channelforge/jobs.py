@@ -10,6 +10,7 @@ _lock = threading.Lock()
 
 JOB_TYPES = {
     "refresh": refresh.run_refresh,
+    "quick_refresh": refresh.run_quick_refresh,
     "apply_rules": rules.apply_all,
     "dedupe": rules.merge_duplicates,
     "health": health.run_health_checks,
