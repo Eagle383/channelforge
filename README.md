@@ -34,6 +34,8 @@ services:
 
 ## Setup walkthrough
 
+> Want the long version? **[docs/how-to.md](docs/how-to.md)** is a complete step-by-step with worked examples — sources, rules, numbers, genres/collections, automation, and troubleshooting.
+
 Ten minutes, start to finish:
 
 1. **Settings** — set your Channels DVR server URL (e.g. `http://192.168.1.10:8089`; comma-separate to update several servers at once) and the **external base URL** of channelforge itself (e.g. `http://192.168.1.10:5100`) so the DVR knows where to fetch playlists from.
@@ -51,6 +53,8 @@ Ten minutes, start to finish:
 **Stream selection.** At output time each channel picks a stream from its assigned source channels: healthy streams first, source priority order within those, then the provider order (Sources page, drag to reorder) as the tie-break inside combined feeds, and an optional per-channel *preferred source* that overrides priority. If a stream starts failing health checks, the next refresh fails over automatically.
 
 **Outputs.** Channels with a Gracenote station ID land in the *gracenote* M3Us (the DVR's own guide data); everything else lands in the *epg* M3Us paired with the combined XMLTV guide, filtered to only the channels you actually use. Each group is further split by stream format and chunked (default 1200 channels per file) because Channels DVR handles several medium playlists better than one giant one.
+
+**Genres and DVR collections.** Channels DVR builds collections from the `tvc-guide-genres` attribute, but combined feeds usually carry the genre only in `group-title`. channelforge resolves every channel's genres with one rule — your per-channel override, else the winning stream's genres, else the channel's Group, else the winning stream's `group-title` — and emits the result as `tvc-guide-genres`. The Channels page shows exactly that resolved value, so the Genres column and genre filter are a faithful preview of your collections; filter by "(no genres)" to find channels that still need one.
 
 **Channel numbers.** A number you set manually (editable inline on the Channels page) always wins. Otherwise, set *auto-number starting at* to number every channel sequentially from your chosen base; dotted OTA numbers like `7.1` are kept as-is — even when a combined feed hides them inside the channel id (`hdhomerun.4.7`) and renumbers the entry itself — and with auto-numbering off channels keep their source-supplied numbers. Whatever number a channel actually uses is saved onto it at refresh, so numbers are always visible, editable, and stable across refreshes and updates.
 
