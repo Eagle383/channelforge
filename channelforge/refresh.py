@@ -77,6 +77,25 @@ def sync_source(source, log):
     return len(seen)
 
 
+def assigned_children():
+    """channel_id -> its children from active sources, in pick order: source
+    priority first, then the drag-and-drop provider order for combined feeds
+    where one source carries many providers (unranked providers last), then id.
+    """
+    children = db.q("""
+        SELECT sc.*, s.priority AS src_priority, s.stream_format AS src_format, s.name AS src_name
+        FROM source_channels sc JOIN sources s ON s.id = sc.source_id
+        WHERE sc.channel_id IS NOT NULL AND s.active = 1
+    """)
+    rank = {p: i for i, p in enumerate(json.loads(db.get_setting("provider_order") or "[]"))}
+    unranked = len(rank)
+    by_channel = {}
+    for c in sorted(children, key=lambda c: (
+            c["src_priority"], rank.get(m3u.provider_of(c["external_id"]), unranked), c["id"])):
+        by_channel.setdefault(c["channel_id"], []).append(c)
+    return by_channel
+
+
 def pick_stream(children_rows, preferred_source_id):
     """children_rows sorted by source priority; return best (row, format)."""
     candidates = [c for c in children_rows if c["present"] and not c["ignored"]]
@@ -96,21 +115,7 @@ def build_outputs(log=lambda s: None):
     """Generate m3u files + combined XMLTV into the outputs dir."""
     max_per = int(db.get_setting("output_max_per_m3u", "1200") or 1200)
     channels = db.q("SELECT * FROM channels WHERE active = 1 ORDER BY name COLLATE NOCASE")
-    children = db.q("""
-        SELECT sc.*, s.priority AS src_priority, s.stream_format AS src_format
-        FROM source_channels sc JOIN sources s ON s.id = sc.source_id
-        WHERE sc.channel_id IS NOT NULL AND s.active = 1
-    """)
-    # source priority first, then the drag-and-drop provider order for
-    # combined feeds where one source carries many providers (samsung.*,
-    # stirr.*, ...); unranked providers sort last
-    rank = {p: i for i, p in enumerate(json.loads(db.get_setting("provider_order") or "[]"))}
-    unranked = len(rank)
-    children = sorted(children, key=lambda c: (
-        c["src_priority"], rank.get(m3u.provider_of(c["external_id"]), unranked), c["id"]))
-    by_channel = {}
-    for c in children:
-        by_channel.setdefault(c["channel_id"], []).append(c)
+    by_channel = assigned_children()
 
     lineups = {("gracenote", "HLS"): [], ("gracenote", "MPEG-TS"): [], ("epg", "HLS"): [], ("epg", "MPEG-TS"): []}
     wanted_tvg_ids = set()

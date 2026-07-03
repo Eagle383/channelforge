@@ -113,14 +113,21 @@ def channels_page(request: Request, q: str = "", show: str = "all", prov: str = 
         g = json.loads(k["attrs"] or "{}").get("tvc-guide-genres") or ""
         kid_genres.setdefault(k["cid"], set()).update(t.strip() for t in g.split(",") if t.strip())
     all_provs = sorted({p for ps in provs.values() for p in ps}, key=str.casefold)
+    pick_pool = refresh.assigned_children()
 
     def enrich(r):
         ovr = json.loads(r["attrs"] or "{}")
         gset = ({t.strip() for t in ovr["tvc-guide-genres"].split(",") if t.strip()}
                 if ovr.get("tvc-guide-genres") else kid_genres.get(r["id"], set()))
+        pool = pick_pool.get(r["id"], [])
+        best, _ = refresh.pick_stream(pool, r["preferred_source_id"])
+        kids = [{"prov": m3u.provider_of(k["external_id"]) or k["src_name"], "src": k["src_name"],
+                 "ext": k["external_id"], "healthy": k["healthy"], "present": k["present"],
+                 "win": best is not None and k["id"] == best["id"]} for k in pool]
         return dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold)),
                     genres_eff=", ".join(sorted(gset, key=str.casefold)), genres_set=gset,
-                    genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""))
+                    genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""),
+                    kids=kids, pick=next((k["prov"] for k in kids if k["win"]), ""))
 
     rows = [enrich(r) for r in rows]
     all_genres = sorted({g for r in rows for g in r["genres_set"]}, key=str.casefold)

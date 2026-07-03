@@ -53,7 +53,7 @@
       </form>
     </td>
     <td class="small">{% if c.gracenote_id %}<span class="badge ok">gracenote {{ c.gracenote_id }}</span>{% elif c.tvg_id %}<span class="badge">epg {{ c.tvg_id }}</span>{% else %}<span class="badge bad">none</span>{% endif %}</td>
-    <td>{{ c.n_children }}</td>
+    <td>{{ c.n_children }}{% if c.pick %} <span class="badge ok" title="stream in use">▶ {{ c.pick }}</span>{% endif %}</td>
     <td class="dim small">{{ c.provs }}</td>
     <td class="dim small">{{ c.genres_eff }}{% if c.genres_ovr %} <span class="badge" title="override set on this channel">ovr</span>{% endif %}</td>
     <td><details><summary class="dim small">edit</summary>
@@ -75,6 +75,20 @@
       <form class="inline" method="post" action="/channels/delete" onsubmit="return confirm('Delete channel?')">
         <input type="hidden" name="channel_id" value="{{ c.id }}"><button class="danger small">Delete</button>
       </form>
+      {% if c.kids %}
+      <p class="dim small" style="margin:8px 0 2px">Streams in pick order — top healthy one wins:</p>
+      <table>
+        <tr><th></th><th>Provider</th><th>Source</th><th>Id</th><th>Health</th></tr>
+        {% for k in c.kids %}
+        <tr>
+          <td>{% if k.win %}<span class="badge ok">▶ in use</span>{% endif %}</td>
+          <td>{{ k.prov }}</td><td class="dim small">{{ k.src }}</td>
+          <td class="dim small">{{ k.ext }}</td>
+          <td>{% if not k.present %}<span class="badge">gone</span>{% elif not k.healthy %}<span class="badge bad">down</span>{% else %}<span class="badge ok">ok</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
     </details></td>
   </tr>
   {% endfor %}
