@@ -11,6 +11,7 @@ import unicodedata
 from . import db
 
 _NORM_RE = re.compile(r"[^a-z0-9]+")
+_BY_BRAND_RE = re.compile(r"\s+by\s+.+$", re.IGNORECASE)
 
 
 def normalize(name):
@@ -21,6 +22,13 @@ def normalize(name):
     """
     s = unicodedata.normalize("NFKD", name or "").casefold()
     return _NORM_RE.sub("", s)
+
+
+def dedupe_key(name):
+    """normalize() with a trailing ' by <brand>' clause dropped, so provider
+    renames like 'Duck Dynasty by A&E' land on 'Duck Dynasty'. Fallback only —
+    an exact normalize() match always wins, and a rule can override either."""
+    return normalize(_BY_BRAND_RE.sub("", name or ""))
 
 MATCH_FIELDS = ["name", "tvg_id", "tvg_name", "group", "url", "external_id", "any"]
 MATCH_TYPES = ["equals", "not_equals", "contains", "not_contains", "starts", "not_starts", "ends", "not_ends", "regex", "not_regex"]
@@ -142,11 +150,12 @@ def apply_all(log=lambda s: None):
     engine = load_engine()
     auto_match = db.get_setting("auto_assign_normalized") != "0"
     auto_create = db.get_setting("auto_create_channels") == "1"
-    by_norm = {}
+    by_norm, by_alias = {}, {}
     if auto_match:
         # prefer curated (numbered) channels, then oldest, when variants collide
         for ch in db.q("SELECT id, name FROM channels ORDER BY (number != '') DESC, id"):
             by_norm.setdefault(normalize(ch["name"]), ch["id"])
+            by_alias.setdefault(dedupe_key(ch["name"]), ch["id"])
     rows = db.q("SELECT * FROM source_channels WHERE present = 1")
     assigned = ignored_n = changed_n = matched = created = 0
     updates = []
@@ -167,9 +176,12 @@ def apply_all(log=lambda s: None):
             key = normalize(sc["name"])
             if key:
                 cid = by_norm.get(key)
+                if cid is None:
+                    cid = by_alias.get(dedupe_key(sc["name"]))
                 if cid is None and auto_create:
                     cid = db.execute("INSERT INTO channels(name) VALUES(?)", (sc["name"],)).lastrowid
                     by_norm[key] = cid
+                    by_alias.setdefault(dedupe_key(sc["name"]), cid)
                     created += 1
                 if cid is not None:
                     new_channel = cid
