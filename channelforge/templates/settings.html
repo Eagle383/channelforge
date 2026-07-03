@@ -44,7 +44,7 @@
   <div class="grid">
     <label>FastChannels server address — its force-refresh is POSTed before each refresh so the feeds rebuild first (blank = off; a full URL to any other hook works too)
       <input name="prerefresh_url" value="{{ s['prerefresh_url'] }}" placeholder="192.168.1.10:5523"></label>
-    <label>Minutes to wait after the hook before fetching sources
+    <label>Max minutes to wait for the rebuild (FastChannels: continues as soon as every source has rescraped)
       <input name="prerefresh_wait_min" type="number" value="{{ s['prerefresh_wait_min'] }}" placeholder="30"></label>
   </div>
   <h2>Health checks</h2>

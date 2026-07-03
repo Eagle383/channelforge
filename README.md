@@ -67,7 +67,7 @@ Ten minutes, start to finish:
 | Auto-assign by normalized name | Unmatched source channels attach to channels by collapsed-name match (default on) |
 | Auto-create channels | Create the channel when nothing matches — hands-off lineup building (default off) |
 | Pre-refresh hook | Address of a FastChannels server (its force-refresh endpoint is filled in for you) or any full hook URL; POSTed before each refresh so the upstream source rebuilds first. Blank = off |
-| Pre-refresh wait | Minutes to wait after the hook before fetching sources |
+| Pre-refresh wait | Max minutes to wait after the hook before fetching sources. For a FastChannels hook, its scrape status is polled and the refresh continues as soon as every enabled source has rescraped |
 | Health: fail threshold | Consecutive failed checks before a stream is marked unhealthy |
 | Health: concurrency | Parallel stream checks |
 | Time zone | IANA zone (e.g. `America/Chicago`) for the schedule and log timestamps; blank = server default |

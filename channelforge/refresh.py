@@ -212,23 +212,67 @@ def build_outputs(log=lambda s: None):
         log(f"outputs: {skipped} active channels had no available stream")
 
 
-def run_refresh(log=lambda s: None):
+_FC_SUFFIX = "/api/sources/force-refresh"
+
+
+def _fc_scrape_times(base):
+    """FastChannels enabled sources -> last_scraped_at (None while queued)."""
+    with httpx.Client(timeout=15) as client:
+        r = client.get(f"{base}/api/sources")
+        r.raise_for_status()
+        return {s["id"]: s.get("last_scraped_at") for s in r.json() if s.get("is_enabled")}
+
+
+def _run_prerefresh_hook(log):
     hook = (db.get_setting("prerefresh_url") or "").strip().rstrip("/")
-    if hook:
-        if not hook.startswith(("http://", "https://")):
-            hook = "http://" + hook
-        if not httpx.URL(hook).path.strip("/"):   # bare server address = FastChannels
-            hook += "/api/sources/force-refresh"
+    if not hook:
+        return
+    if not hook.startswith(("http://", "https://")):
+        hook = "http://" + hook
+    if not httpx.URL(hook).path.strip("/"):   # bare server address = FastChannels
+        hook += _FC_SUFFIX
+    before = None
+    if hook.endswith(_FC_SUFFIX):
         try:
-            with httpx.Client(timeout=30) as client:
-                r = client.post(hook)
-            log(f"pre-refresh hook: POST {hook} -> {r.status_code}")
-        except Exception as e:
-            log(f"pre-refresh hook FAILED ({e}); continuing")
-        wait = (db.get_setting("prerefresh_wait_min") or "").strip()
-        if wait.isdigit() and int(wait) > 0:
-            log(f"pre-refresh hook: waiting {wait} min for the source to rebuild...")
-            time.sleep(int(wait) * 60)
+            before = _fc_scrape_times(hook[:-len(_FC_SUFFIX)])
+        except Exception:
+            pass   # can't poll it; fall back to the fixed wait
+    try:
+        with httpx.Client(timeout=30) as client:
+            r = client.post(hook)
+        log(f"pre-refresh hook: POST {hook} -> {r.status_code}")
+    except Exception as e:
+        log(f"pre-refresh hook FAILED ({e}); continuing")
+        return
+    wait = (db.get_setting("prerefresh_wait_min") or "").strip()
+    if not (wait.isdigit() and int(wait) > 0):
+        return
+    deadline = time.time() + int(wait) * 60
+    if before is None:
+        log(f"pre-refresh hook: waiting {wait} min for the source to rebuild...")
+        time.sleep(int(wait) * 60)
+        return
+    # FastChannels: a source is done once its last_scraped_at moves past the
+    # snapshot taken before the POST — continue as soon as all of them have
+    log(f"pre-refresh hook: waiting for {len(before)} sources to rescrape (up to {wait} min)...")
+    pending = set(before)
+    while pending and time.time() < deadline:
+        time.sleep(20)
+        try:
+            now_times = _fc_scrape_times(hook[:-len(_FC_SUFFIX)])
+        except Exception:
+            continue
+        still = {i for i in pending if i in now_times
+                 and (not now_times[i] or now_times[i] == before[i])}
+        if len(still) < len(pending):
+            log(f"pre-refresh hook: {len(before) - len(still)}/{len(before)} sources rescraped")
+        pending = still
+    if pending:
+        log(f"pre-refresh hook: gave up waiting on {len(pending)} sources; continuing")
+
+
+def run_refresh(log=lambda s: None):
+    _run_prerefresh_hook(log)
     log("refreshing sources...")
     total = 0
     for source in db.q("SELECT * FROM sources WHERE active = 1 ORDER BY priority"):
