@@ -1,0 +1,33 @@
+{# edit-panel fragment for one channel, loaded on demand by channels.html #}
+<form method="post" action="/channels/save">
+  <input type="hidden" name="channel_id" value="{{ c.id }}">
+  <div class="grid">
+    <label>Name <input name="name" value="{{ c.name }}"></label>
+    <label>Number <input name="number" value="{{ c.number }}"></label>
+    <label>Gracenote ID <input name="gracenote_id" value="{{ c.gracenote_id }}"></label>
+    <label>tvg-id <input name="tvg_id" value="{{ c.tvg_id }}"></label>
+    <label>Logo <input name="logo" value="{{ c.logo }}"></label>
+    <label>Group <input name="grp" value="{{ c.grp }}"></label>
+    <label>Genres override (comma-separated; blank = from streams) <input name="genres" value="{{ c.genres_ovr }}" placeholder="{{ c.genres_eff }}"></label>
+    <label>Categories override <input name="categories" value="{{ c.cats_ovr }}"></label>
+    <label>Active <input type="checkbox" name="active" {{ 'checked' if c.active }}></label>
+    <label>&nbsp;<span><button>Save</button></span></label>
+  </div>
+</form>
+<form class="inline" method="post" action="/channels/delete" onsubmit="return confirm('Delete channel?')">
+  <input type="hidden" name="channel_id" value="{{ c.id }}"><button class="danger small">Delete</button>
+</form>
+{% if c.kids %}
+<p class="dim small" style="margin:8px 0 2px">Streams in pick order — top healthy one wins:</p>
+<table>
+  <tr><th></th><th>Provider</th><th>Source</th><th>Id</th><th>Health</th></tr>
+  {% for k in c.kids %}
+  <tr>
+    <td>{% if k.win %}<span class="badge ok">▶ in use</span>{% endif %}</td>
+    <td>{{ k.prov }}</td><td class="dim small">{{ k.src }}</td>
+    <td class="dim small">{{ k.ext }}</td>
+    <td>{% if not k.present %}<span class="badge">gone</span>{% elif not k.healthy %}<span class="badge bad">down</span>{% else %}<span class="badge ok">ok</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}

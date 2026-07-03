@@ -41,56 +41,65 @@
   </div>
 </form></details>
 
-<table>
+{# no per-row forms/inputs here: with thousands of rows they make form-scanning
+   browser extensions (password managers) freeze the page — number cells become
+   an input on click, the edit panel is fetched on demand #}
+<style>
+  .numedit{display:inline-block;min-width:60px;min-height:1.1em;border-bottom:1px dotted #777;cursor:pointer}
+  .numedit input{width:70px}
+</style>
+<table id="chan">
   <tr><th>Name</th><th>#</th><th>Guide</th><th>Streams</th><th>Providers</th><th>Genres</th><th></th></tr>
   {% for c in channels %}
-  <tr>
+  <tr data-id="{{ c.id }}">
     <td>{{ c.name }}{% if not c.active %} <span class="badge">off</span>{% endif %}</td>
-    <td>
-      <form class="inline" method="post" action="/channels/set_number">
-        <input type="hidden" name="channel_id" value="{{ c.id }}">
-        <input name="number" value="{{ c.number }}" style="width:70px" title="type a number, press Enter">
-      </form>
-    </td>
+    <td><span class="numedit" title="click to edit, Enter saves">{{ c.number }}</span></td>
     <td class="small">{% if c.gracenote_id %}<span class="badge ok">gracenote {{ c.gracenote_id }}</span>{% elif c.tvg_id %}<span class="badge">epg {{ c.tvg_id }}</span>{% else %}<span class="badge bad">none</span>{% endif %}</td>
     <td>{{ c.n_children }}{% if c.pick %} <span class="badge ok" title="stream in use">▶ {{ c.pick }}</span>{% endif %}</td>
     <td class="dim small">{{ c.provs }}</td>
     <td class="dim small">{{ c.genres_eff }}{% if c.genres_ovr %} <span class="badge" title="override set on this channel">ovr</span>{% endif %}</td>
-    <td><details><summary class="dim small">edit</summary>
-      <form method="post" action="/channels/save">
-        <input type="hidden" name="channel_id" value="{{ c.id }}">
-        <div class="grid">
-          <label>Name <input name="name" value="{{ c.name }}"></label>
-          <label>Number <input name="number" value="{{ c.number }}"></label>
-          <label>Gracenote ID <input name="gracenote_id" value="{{ c.gracenote_id }}"></label>
-          <label>tvg-id <input name="tvg_id" value="{{ c.tvg_id }}"></label>
-          <label>Logo <input name="logo" value="{{ c.logo }}"></label>
-          <label>Group <input name="grp" value="{{ c.grp }}"></label>
-          <label>Genres override (comma-separated; blank = from streams) <input name="genres" value="{{ c.genres_ovr }}" placeholder="{{ c.genres_eff }}"></label>
-          <label>Categories override <input name="categories" value="{{ c.cats_ovr }}"></label>
-          <label>Active <input type="checkbox" name="active" {{ 'checked' if c.active }}></label>
-          <label>&nbsp;<span><button>Save</button></span></label>
-        </div>
-      </form>
-      <form class="inline" method="post" action="/channels/delete" onsubmit="return confirm('Delete channel?')">
-        <input type="hidden" name="channel_id" value="{{ c.id }}"><button class="danger small">Delete</button>
-      </form>
-      {% if c.kids %}
-      <p class="dim small" style="margin:8px 0 2px">Streams in pick order — top healthy one wins:</p>
-      <table>
-        <tr><th></th><th>Provider</th><th>Source</th><th>Id</th><th>Health</th></tr>
-        {% for k in c.kids %}
-        <tr>
-          <td>{% if k.win %}<span class="badge ok">▶ in use</span>{% endif %}</td>
-          <td>{{ k.prov }}</td><td class="dim small">{{ k.src }}</td>
-          <td class="dim small">{{ k.ext }}</td>
-          <td>{% if not k.present %}<span class="badge">gone</span>{% elif not k.healthy %}<span class="badge bad">down</span>{% else %}<span class="badge ok">ok</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </table>
-      {% endif %}
-    </details></td>
+    <td><a href="#" class="edit dim small">edit</a></td>
   </tr>
   {% endfor %}
 </table>
+<script>
+document.getElementById('chan').addEventListener('click', ev => {
+  const num = ev.target.closest('.numedit');
+  if (num && !num.querySelector('input')) return editNumber(num);
+  const edit = ev.target.closest('a.edit');
+  if (edit) { ev.preventDefault(); toggleEdit(edit.closest('tr')); }
+});
+
+function editNumber(cell) {
+  const old = cell.textContent.trim();
+  const inp = document.createElement('input');
+  inp.value = old; inp.autocomplete = 'off';
+  cell.textContent = ''; cell.appendChild(inp);
+  inp.focus(); inp.select();
+  inp.onblur = () => { cell.textContent = old; };
+  inp.onkeydown = async e => {
+    if (e.key === 'Escape') inp.blur();
+    if (e.key !== 'Enter') return;
+    e.preventDefault(); inp.onblur = null;
+    const v = inp.value.trim();
+    const r = await fetch('/channels/set_number', {method: 'POST',
+      body: new URLSearchParams({channel_id: cell.closest('tr').dataset.id, number: v})});
+    if (!r.ok) alert('saving number failed');
+    cell.textContent = r.ok ? v : old;
+  };
+}
+
+async function toggleEdit(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('editrow')) { next.remove(); return; }
+  const r = await fetch('/channels/' + tr.dataset.id + '/edit');
+  const row = document.createElement('tr');
+  row.className = 'editrow';
+  const td = document.createElement('td');
+  td.colSpan = 7;
+  td.innerHTML = r.ok ? await r.text() : '<span class="badge bad">failed to load editor</span>';
+  row.appendChild(td);
+  tr.after(row);
+}
+</script>
 {% endblock %}

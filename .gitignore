@@ -5,3 +5,4 @@ data/
 .DS_Store
 CLAUDE.local.md
 channelforge_*.csv
+Trace-*.json

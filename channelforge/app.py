@@ -119,15 +119,11 @@ def channels_page(request: Request, q: str = "", show: str = "all", prov: str = 
         ovr = json.loads(r["attrs"] or "{}")
         gset = ({t.strip() for t in ovr["tvc-guide-genres"].split(",") if t.strip()}
                 if ovr.get("tvc-guide-genres") else kid_genres.get(r["id"], set()))
-        pool = pick_pool.get(r["id"], [])
-        best, _ = refresh.pick_stream(pool, r["preferred_source_id"])
-        kids = [{"prov": m3u.provider_of(k["external_id"]) or k["src_name"], "src": k["src_name"],
-                 "ext": k["external_id"], "healthy": k["healthy"], "present": k["present"],
-                 "win": best is not None and k["id"] == best["id"]} for k in pool]
+        best, _ = refresh.pick_stream(pick_pool.get(r["id"], []), r["preferred_source_id"])
         return dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold)),
                     genres_eff=", ".join(sorted(gset, key=str.casefold)), genres_set=gset,
-                    genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""),
-                    kids=kids, pick=next((k["prov"] for k in kids if k["win"]), ""))
+                    genres_ovr=ovr.get("tvc-guide-genres", ""),
+                    pick=(m3u.provider_of(best["external_id"]) or best["src_name"]) if best else "")
 
     rows = [enrich(r) for r in rows]
     all_genres = sorted({g for r in rows for g in r["genres_set"]}, key=str.casefold)
@@ -142,6 +138,31 @@ def channels_page(request: Request, q: str = "", show: str = "all", prov: str = 
     total = db.q1("SELECT COUNT(*) n FROM channels")["n"]
     return render("channels.html", request, channels=rows, q=q, show=show, total=total,
                   all_provs=all_provs, prov=prov, all_genres=all_genres, genre=genre, sort=sort)
+
+
+@app.get("/channels/{channel_id}/edit", response_class=HTMLResponse)
+def channel_edit(channel_id: int):
+    """Edit-panel fragment, fetched on demand when a row is expanded — the list
+    page must stay free of per-row forms (browser extensions that scan forms,
+    like password managers, freeze for ~20s per click on thousands of inputs)."""
+    r = db.q1("SELECT * FROM channels WHERE id = ?", (channel_id,))
+    if not r:
+        return HTMLResponse("channel not found", status_code=404)
+    ovr = json.loads(r["attrs"] or "{}")
+    kid_genres = set()
+    for k in db.q("SELECT attrs FROM source_channels WHERE present = 1 AND channel_id = ?", (channel_id,)):
+        g = json.loads(k["attrs"] or "{}").get("tvc-guide-genres") or ""
+        kid_genres.update(t.strip() for t in g.split(",") if t.strip())
+    gset = ({t.strip() for t in ovr["tvc-guide-genres"].split(",") if t.strip()}
+            if ovr.get("tvc-guide-genres") else kid_genres)
+    pool = refresh.assigned_children().get(channel_id, [])
+    best, _ = refresh.pick_stream(pool, r["preferred_source_id"])
+    kids = [{"prov": m3u.provider_of(k["external_id"]) or k["src_name"], "src": k["src_name"],
+             "ext": k["external_id"], "healthy": k["healthy"], "present": k["present"],
+             "win": best is not None and k["id"] == best["id"]} for k in pool]
+    c = dict(r, genres_eff=", ".join(sorted(gset, key=str.casefold)),
+             genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""), kids=kids)
+    return HTMLResponse(env.get_template("channel_edit.html").render(c=c))
 
 
 @app.post("/channels/save")
