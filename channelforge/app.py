@@ -91,7 +91,7 @@ def sources_delete(request: Request, source_id: int = Form(...)):
 
 # ---------- channels ----------
 @app.get("/channels", response_class=HTMLResponse)
-def channels_page(request: Request, q: str = "", show: str = "all", prov: str = "", sort: str = "name"):
+def channels_page(request: Request, q: str = "", show: str = "all", prov: str = "", genre: str = "", sort: str = "name"):
     where, params = "1=1", []
     if q:
         where += " AND c.name LIKE ?"
@@ -103,32 +103,56 @@ def channels_page(request: Request, q: str = "", show: str = "all", prov: str = 
     rows = db.q(f"""SELECT c.*,
                     (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children
                     FROM channels c WHERE {where} ORDER BY {order}""", params)
-    # providers per channel from the channel-id prefix; source name when there is none (OTA)
-    provs = {}
-    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, s.name sname
+    # per channel: providers (channel-id prefix, else source name) and the
+    # genres its streams carry (tvc-guide-genres feeds DVR collections)
+    provs, kid_genres = {}, {}
+    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, sc.attrs attrs, s.name sname
                      FROM source_channels sc JOIN sources s ON s.id = sc.source_id
                      WHERE sc.present = 1 AND sc.channel_id IS NOT NULL"""):
         provs.setdefault(k["cid"], set()).add(m3u.provider_of(k["ext"]) or k["sname"])
+        g = json.loads(k["attrs"] or "{}").get("tvc-guide-genres") or ""
+        kid_genres.setdefault(k["cid"], set()).update(t.strip() for t in g.split(",") if t.strip())
     all_provs = sorted({p for ps in provs.values() for p in ps}, key=str.casefold)
-    rows = [dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold))) for r in rows]
+
+    def enrich(r):
+        ovr = json.loads(r["attrs"] or "{}")
+        gset = ({t.strip() for t in ovr["tvc-guide-genres"].split(",") if t.strip()}
+                if ovr.get("tvc-guide-genres") else kid_genres.get(r["id"], set()))
+        return dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold)),
+                    genres_eff=", ".join(sorted(gset, key=str.casefold)), genres_set=gset,
+                    genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""))
+
+    rows = [enrich(r) for r in rows]
+    all_genres = sorted({g for r in rows for g in r["genres_set"]}, key=str.casefold)
     if prov:
         rows = [r for r in rows if prov in provs.get(r["id"], ())]
+    if genre == "-":
+        rows = [r for r in rows if not r["genres_set"]]
+    elif genre:
+        rows = [r for r in rows if genre in r["genres_set"]]
     if sort == "source":
         rows.sort(key=lambda r: (r["provs"].casefold(), r["name"].casefold()))
     total = db.q1("SELECT COUNT(*) n FROM channels")["n"]
     return render("channels.html", request, channels=rows, q=q, show=show, total=total,
-                  all_provs=all_provs, prov=prov, sort=sort)
+                  all_provs=all_provs, prov=prov, all_genres=all_genres, genre=genre, sort=sort)
 
 
 @app.post("/channels/save")
 def channels_save(request: Request, channel_id: str = Form(""), name: str = Form(...), number: str = Form(""),
                   gracenote_id: str = Form(""), tvg_id: str = Form(""), logo: str = Form(""),
-                  grp: str = Form(""), active: str = Form("")):
-    vals = (name, number, gracenote_id, tvg_id, logo, grp, 1 if active else 0)
+                  grp: str = Form(""), active: str = Form(""), genres: str = Form(""), categories: str = Form("")):
+    row = db.q1("SELECT attrs FROM channels WHERE id = ?", (int(channel_id),)) if channel_id.isdigit() else None
+    attrs = json.loads(row["attrs"] or "{}") if row else {}
+    for key, v in (("tvc-guide-genres", genres.strip()), ("tvc-guide-categories", categories.strip())):
+        if v:
+            attrs[key] = v
+        else:
+            attrs.pop(key, None)
+    vals = (name, number, gracenote_id, tvg_id, logo, grp, 1 if active else 0, json.dumps(attrs))
     if channel_id.isdigit():
-        db.execute("UPDATE channels SET name=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, active=? WHERE id=?", vals + (int(channel_id),))
+        db.execute("UPDATE channels SET name=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, active=?, attrs=? WHERE id=?", vals + (int(channel_id),))
     else:
-        db.execute("INSERT INTO channels(name, number, gracenote_id, tvg_id, logo, grp, active) VALUES(?,?,?,?,?,?,?)", vals)
+        db.execute("INSERT INTO channels(name, number, gracenote_id, tvg_id, logo, grp, active, attrs) VALUES(?,?,?,?,?,?,?,?)", vals)
     return back(request, "saved")
 
 
