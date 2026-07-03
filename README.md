@@ -83,7 +83,7 @@ Ten minutes, start to finish:
 | reset_passes | Pause/resume every DVR pass and force all guide lineups to re-download |
 | refresh_dvr_m3u | Ask every DVR server to re-pull its M3U sources |
 
-One job runs at a time; the dashboard tails the live log.
+One job runs at a time; the dashboard tails the live log. Job history and logs are kept for a week.
 
 ## CSV round-trip
 

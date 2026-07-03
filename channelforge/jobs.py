@@ -1,4 +1,5 @@
 """Background job runner (one heavy job at a time) and daily scheduler."""
+import datetime
 import threading
 import time
 import traceback
@@ -27,6 +28,8 @@ def start_job(job_type, extra=None):
         return None
     if not _lock.acquire(blocking=False):
         return None
+    cutoff = (db.local_now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("DELETE FROM jobs WHERE started < ? AND status != 'running'", (cutoff,))
     job_id = db.execute("INSERT INTO jobs(type, status, started) VALUES(?, 'running', ?)", (job_type, _now())).lastrowid
 
     def log(line):
