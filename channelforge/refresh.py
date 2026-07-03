@@ -223,6 +223,19 @@ def _fc_scrape_times(base):
         return {s["id"]: s.get("last_scraped_at") for s in r.json() if s.get("is_enabled")}
 
 
+def _fc_all_idle(base, ids):
+    """True if none of these FastChannels sources is scraping right now."""
+    with httpx.Client(timeout=15) as client:
+        for i in ids:
+            try:
+                status = client.get(f"{base}/api/sources/{i}/scrape-status").json().get("status")
+            except Exception:
+                return False
+            if status != "idle":
+                return False
+    return True
+
+
 def _run_prerefresh_hook(log):
     hook = (db.get_setting("prerefresh_url") or "").strip().rstrip("/")
     if not hook:
@@ -255,11 +268,12 @@ def _run_prerefresh_hook(log):
     # FastChannels: a source is done once its last_scraped_at moves past the
     # snapshot taken before the POST — continue as soon as all of them have
     log(f"pre-refresh hook: waiting for {len(before)} sources to rescrape (up to {wait} min)...")
-    pending = set(before)
+    fc_base = hook[:-len(_FC_SUFFIX)]
+    pending, idle_streak = set(before), 0
     while pending and time.time() < deadline:
         time.sleep(20)
         try:
-            now_times = _fc_scrape_times(hook[:-len(_FC_SUFFIX)])
+            now_times = _fc_scrape_times(fc_base)
         except Exception:
             continue
         still = {i for i in pending if i in now_times
@@ -267,6 +281,12 @@ def _run_prerefresh_hook(log):
         if len(still) < len(pending):
             log(f"pre-refresh hook: {len(before) - len(still)}/{len(before)} sources rescraped")
         pending = still
+        # sources with nothing to scrape never get a new timestamp — once the
+        # scraper has sat idle for a minute, whatever is left isn't coming
+        idle_streak = idle_streak + 1 if pending and _fc_all_idle(fc_base, pending) else 0
+        if idle_streak >= 3:
+            log(f"pre-refresh hook: scraper idle, {len(pending)} sources had nothing new; continuing")
+            return
     if pending:
         log(f"pre-refresh hook: gave up waiting on {len(pending)} sources; continuing")
 
