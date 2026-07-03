@@ -314,6 +314,8 @@ def run_refresh(log=lambda s: None):
         total += sync_source(source, log)
     log(f"total channels across sources: {total}")
     rules.apply_all(log)
+    if db.get_setting("auto_merge_duplicates") != "0":
+        rules.merge_duplicates(log)
     build_outputs(log)
     if db.get_setting("push_outputs_to_dvr") == "1":
         base = (db.get_setting("base_url") or "").rstrip("/")

@@ -140,6 +140,76 @@ def load_engine():
     return Engine(db.q("SELECT * FROM rules"))
 
 
+def merge_duplicates(log=lambda s: None):
+    """Collapse duplicate lineup channels into one and delete the extras.
+
+    Two channels are duplicates when they share a guide station id (their own
+    gracenote_id or one carried by a present child) or the same dedupe_key()
+    name ('Duck Dynasty' / 'Duck Dynasty by A&E') — the same evidence the
+    auto-assign fallthrough uses, so anything this merges is a pair auto-assign
+    would have kept together in the first place. Names that merely look alike
+    ('Fifth Gear' / 'Fifth Gear (UK)') are never merged without station-id proof.
+
+    The survivor is the plainest active name (oldest on ties). Children and
+    rules are repointed at it, its blank metadata is backfilled from the
+    duplicates, and the duplicates are deleted. Runs as the 'dedupe' job
+    (button on the Channels/Jobs pages) and inside every refresh unless
+    `auto_merge_duplicates` is off.
+    """
+    channels = db.q("SELECT * FROM channels")
+    parent = {c["id"]: c["id"] for c in channels}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    seen = {}
+    for c in channels:
+        key = dedupe_key(c["name"])
+        if key:
+            union(seen.setdefault(("key", key), c["id"]), c["id"])
+        if c["gracenote_id"]:
+            union(seen.setdefault(("sid", c["gracenote_id"]), c["id"]), c["id"])
+    for row in db.q("SELECT channel_id, attrs FROM source_channels WHERE channel_id IS NOT NULL AND present = 1"):
+        sid = db.attrs_of(row).get("tvc-guide-stationid")
+        if sid:
+            union(seen.setdefault(("sid", sid), row["channel_id"]), row["channel_id"])
+
+    clusters = {}
+    for c in channels:
+        clusters.setdefault(find(c["id"]), []).append(c)
+    merged = 0
+    for group in clusters.values():
+        if len(group) < 2:
+            continue
+        # keep the plain name over a 'by <brand>' rename, active over inactive, oldest on ties
+        group.sort(key=lambda c: (normalize(c["name"]) != dedupe_key(c["name"]), not c["active"], c["id"]))
+        keeper, losers = dict(group[0]), group[1:]
+        for loser in losers:
+            db.execute("UPDATE source_channels SET channel_id = ? WHERE channel_id = ?", (keeper["id"], loser["id"]))
+            db.execute("UPDATE rules SET target_channel_id = ? WHERE target_channel_id = ?", (keeper["id"], loser["id"]))
+            for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description"):
+                if not keeper[f] and loser[f]:
+                    keeper[f] = loser[f]
+            if keeper["preferred_source_id"] is None:
+                keeper["preferred_source_id"] = loser["preferred_source_id"]
+            keeper["attrs"] = json.dumps({**json.loads(loser["attrs"] or "{}"), **json.loads(keeper["attrs"] or "{}")})
+            db.execute("DELETE FROM channels WHERE id = ?", (loser["id"],))
+            log(f"  merged '{loser['name']}' into '{keeper['name']}'")
+            merged += 1
+        db.execute("UPDATE channels SET number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=?, preferred_source_id=?, attrs=? WHERE id=?",
+                   tuple(keeper[f] for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_source_id", "attrs")) + (keeper["id"],))
+    log(f"dedupe: merged {merged} duplicate channels" if merged else "dedupe: no duplicates found")
+    return merged
+
+
 def apply_all(log=lambda s: None):
     """Re-run rules over every present, unassigned, non-ignored source channel.
 

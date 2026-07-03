@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Jobs</h1>
 <div class="bar">
-  {% for t in ['refresh', 'apply_rules', 'health', 'reset_passes', 'refresh_dvr_m3u'] %}
+  {% for t in ['refresh', 'apply_rules', 'dedupe', 'health', 'reset_passes', 'refresh_dvr_m3u'] %}
   <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="{{ t }}"><button class="quiet" {{ 'disabled' if running }}>{{ t }}</button></form>
   {% endfor %}
 </div>

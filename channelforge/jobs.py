@@ -11,6 +11,7 @@ _lock = threading.Lock()
 JOB_TYPES = {
     "refresh": refresh.run_refresh,
     "apply_rules": rules.apply_all,
+    "dedupe": rules.merge_duplicates,
     "health": health.run_health_checks,
     "reset_passes": channels_dvr.reset_passes,
     "refresh_dvr_m3u": channels_dvr.refresh_m3u_playlists,
