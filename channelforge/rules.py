@@ -144,19 +144,32 @@ def apply_all(log=lambda s: None):
     """Re-run rules over every present, unassigned, non-ignored source channel.
 
     After the rules, source channels still unassigned can fall through to
-    normalized-name matching against existing channels (and optionally
-    auto-create a channel when nothing matches). Ignore rules always win.
+    guide-station matching (same tvc-guide-stationid = same channel, whatever
+    the providers call it), then normalized-name matching against existing
+    channels (and optionally auto-create a channel when nothing matches).
+    Ignore rules always win.
     """
     engine = load_engine()
     auto_match = db.get_setting("auto_assign_normalized") != "0"
     auto_create = db.get_setting("auto_create_channels") == "1"
-    by_norm, by_alias = {}, {}
+    by_norm, by_alias, by_station = {}, {}, {}
     if auto_match:
         # prefer curated (numbered) channels, then oldest, when variants collide
-        for ch in db.q("SELECT id, name FROM channels ORDER BY (number != '') DESC, id"):
+        for ch in db.q("SELECT id, name, gracenote_id FROM channels ORDER BY (number != '') DESC, id"):
             by_norm.setdefault(normalize(ch["name"]), ch["id"])
             by_alias.setdefault(dedupe_key(ch["name"]), ch["id"])
+            if ch["gracenote_id"]:
+                by_station.setdefault(ch["gracenote_id"], ch["id"])
     rows = db.q("SELECT * FROM source_channels WHERE present = 1")
+    sid_of_name = {}   # normalized name -> station id, so a sid-less EPG child
+    if auto_match:     # can borrow the sid its gracenote-feed twin carries
+        for row in rows:
+            sid = db.attrs_of(row).get("tvc-guide-stationid")
+            if not sid:
+                continue
+            sid_of_name.setdefault(normalize(row["name"]), sid)
+            if row["channel_id"] is not None and not row["ignored"]:
+                by_station.setdefault(sid, row["channel_id"])
     assigned = ignored_n = changed_n = matched = created = 0
     updates = []
     for row in rows:
@@ -174,18 +187,22 @@ def apply_all(log=lambda s: None):
             ignored_n += 1
         if auto_match and new_channel is None and not new_ignored:
             key = normalize(sc["name"])
-            if key:
+            sid = sc["_attrs"].get("tvc-guide-stationid", "") or sid_of_name.get(key, "")
+            cid = by_station.get(sid) if sid else None
+            if cid is None and key:
                 cid = by_norm.get(key)
                 if cid is None:
                     cid = by_alias.get(dedupe_key(sc["name"]))
-                if cid is None and auto_create:
-                    cid = db.execute("INSERT INTO channels(name) VALUES(?)", (sc["name"],)).lastrowid
-                    by_norm[key] = cid
-                    by_alias.setdefault(dedupe_key(sc["name"]), cid)
-                    created += 1
-                if cid is not None:
-                    new_channel = cid
-                    matched += 1
+            if cid is None and auto_create and key:
+                cid = db.execute("INSERT INTO channels(name) VALUES(?)", (sc["name"],)).lastrowid
+                by_norm[key] = cid
+                by_alias.setdefault(dedupe_key(sc["name"]), cid)
+                created += 1
+            if cid is not None:
+                if sid:
+                    by_station.setdefault(sid, cid)
+                new_channel = cid
+                matched += 1
         new_name = sc["name"]
         if changed:
             changed_n += 1
