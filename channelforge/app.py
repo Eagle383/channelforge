@@ -30,11 +30,13 @@ def render(name, request, **ctx):
 
 
 def back(request, flash=""):
-    url = request.headers.get("referer") or "/"
-    url = url.split("?")[0]
+    """Redirect to the referring page, keeping its filters/search intact."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit
+    ref = urlsplit(request.headers.get("referer") or "/")
+    params = [(k, v) for k, v in parse_qsl(ref.query) if k != "flash"]
     if flash:
-        from urllib.parse import quote
-        url += f"?flash={quote(flash)}"
+        params.append(("flash", flash))
+    url = (ref.path or "/") + (f"?{urlencode(params)}" if params else "")
     return RedirectResponse(url, status_code=303)
 
 
