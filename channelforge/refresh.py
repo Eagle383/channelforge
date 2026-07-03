@@ -96,6 +96,18 @@ def assigned_children():
     return by_channel
 
 
+def effective_genres(channel_row, best_child):
+    """The tvc-guide-genres value the outputs emit for this channel — the DVR's
+    collections depend on it. Precedence: channel override, the winning
+    stream's genres, the channel's group, the winning stream's group-title
+    (combined feeds usually carry the genre only there)."""
+    ovr = json.loads(channel_row["attrs"] or "{}")
+    if ovr.get("tvc-guide-genres"):
+        return ovr["tvc-guide-genres"]
+    battrs = json.loads(best_child["attrs"] or "{}") if best_child else {}
+    return battrs.get("tvc-guide-genres") or channel_row["grp"] or battrs.get("group-title", "")
+
+
 def pick_stream(children_rows, preferred_source_id):
     """children_rows sorted by source priority; return best (row, format)."""
     candidates = [c for c in children_rows if c["present"] and not c["ignored"]]
@@ -159,6 +171,9 @@ def build_outputs(log=lambda s: None):
         if ch["description"]:
             attrs["tvg-description"] = ch["description"]
         attrs.update({k: v for k, v in overrides.items() if v})
+        genres = effective_genres(ch, best)
+        if genres:
+            attrs["tvc-guide-genres"] = genres
 
         gracenote = ch["gracenote_id"] or child_attrs.get("tvc-guide-stationid", "")
         if gracenote:

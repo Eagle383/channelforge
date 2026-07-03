@@ -105,25 +105,22 @@ def channels_page(request: Request, q: str = "", show: str = "all", prov: str = 
     rows = db.q(f"""SELECT c.*,
                     (SELECT COUNT(*) FROM source_channels sc WHERE sc.channel_id = c.id AND sc.present = 1) n_children
                     FROM channels c WHERE {where} ORDER BY {order}""", params)
-    # per channel: providers (channel-id prefix, else source name) and the
-    # genres its streams carry (tvc-guide-genres feeds DVR collections)
-    provs, kid_genres = {}, {}
-    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, sc.attrs attrs, s.name sname
+    # per channel: providers (channel-id prefix, else source name)
+    provs = {}
+    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, s.name sname
                      FROM source_channels sc JOIN sources s ON s.id = sc.source_id
                      WHERE sc.present = 1 AND sc.channel_id IS NOT NULL"""):
         provs.setdefault(k["cid"], set()).add(m3u.provider_of(k["ext"]) or k["sname"])
-        g = json.loads(k["attrs"] or "{}").get("tvc-guide-genres") or ""
-        kid_genres.setdefault(k["cid"], set()).update(t.strip() for t in g.split(",") if t.strip())
     all_provs = sorted({p for ps in provs.values() for p in ps}, key=str.casefold)
     pick_pool = refresh.assigned_children()
 
     def enrich(r):
         ovr = json.loads(r["attrs"] or "{}")
-        gset = ({t.strip() for t in ovr["tvc-guide-genres"].split(",") if t.strip()}
-                if ovr.get("tvc-guide-genres") else kid_genres.get(r["id"], set()))
         best, _ = refresh.pick_stream(pick_pool.get(r["id"], []), r["preferred_source_id"])
+        geff = refresh.effective_genres(r, best)   # what the outputs will emit
+        gset = {t.strip() for t in geff.split(",") if t.strip()}
         return dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold)),
-                    genres_eff=", ".join(sorted(gset, key=str.casefold)), genres_set=gset,
+                    genres_eff=geff, genres_set=gset,
                     genres_ovr=ovr.get("tvc-guide-genres", ""),
                     pick=(m3u.provider_of(best["external_id"]) or best["src_name"]) if best else "")
 
@@ -151,18 +148,12 @@ def channel_edit(channel_id: int):
     if not r:
         return HTMLResponse("channel not found", status_code=404)
     ovr = json.loads(r["attrs"] or "{}")
-    kid_genres = set()
-    for k in db.q("SELECT attrs FROM source_channels WHERE present = 1 AND channel_id = ?", (channel_id,)):
-        g = json.loads(k["attrs"] or "{}").get("tvc-guide-genres") or ""
-        kid_genres.update(t.strip() for t in g.split(",") if t.strip())
-    gset = ({t.strip() for t in ovr["tvc-guide-genres"].split(",") if t.strip()}
-            if ovr.get("tvc-guide-genres") else kid_genres)
     pool = refresh.assigned_children().get(channel_id, [])
     best, _ = refresh.pick_stream(pool, r["preferred_source_id"])
     kids = [{"prov": m3u.provider_of(k["external_id"]) or k["src_name"], "src": k["src_name"],
              "ext": k["external_id"], "healthy": k["healthy"], "present": k["present"],
              "win": best is not None and k["id"] == best["id"]} for k in pool]
-    c = dict(r, genres_eff=", ".join(sorted(gset, key=str.casefold)),
+    c = dict(r, genres_eff=refresh.effective_genres(r, best),
              genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""), kids=kids)
     return HTMLResponse(env.get_template("channel_edit.html").render(c=c))
 
