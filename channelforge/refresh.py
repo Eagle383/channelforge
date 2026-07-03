@@ -1,7 +1,7 @@
 """Fetch sources, sync source_channels, run rules, regenerate outputs."""
-import datetime
 import json
 import os
+import time
 
 import httpx
 
@@ -11,7 +11,7 @@ OUT_DIR_NAME = "outputs"
 
 
 def now():
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return db.local_now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def out_dir():
@@ -213,6 +213,18 @@ def build_outputs(log=lambda s: None):
 
 
 def run_refresh(log=lambda s: None):
+    hook = (db.get_setting("prerefresh_url") or "").strip()
+    if hook:
+        try:
+            with httpx.Client(timeout=30) as client:
+                r = client.post(hook)
+            log(f"pre-refresh hook: POST {hook} -> {r.status_code}")
+        except Exception as e:
+            log(f"pre-refresh hook FAILED ({e}); continuing")
+        wait = (db.get_setting("prerefresh_wait_min") or "").strip()
+        if wait.isdigit() and int(wait) > 0:
+            log(f"pre-refresh hook: waiting {wait} min for the source to rebuild...")
+            time.sleep(int(wait) * 60)
     log("refreshing sources...")
     total = 0
     for source in db.q("SELECT * FROM sources WHERE active = 1 ORDER BY priority"):

@@ -1,8 +1,10 @@
 """SQLite layer: schema, connection handling, settings access."""
+import datetime
 import json
 import os
 import sqlite3
 import threading
+import zoneinfo
 
 DATA_DIR = os.environ.get("CF_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"))
 DB_PATH = os.path.join(DATA_DIR, "channelforge.db")
@@ -94,15 +96,18 @@ DEFAULT_SETTINGS = {
     "output_start_number": "",                 # auto-number channels from here (persisted per channel); blank = keep source numbers
     "health_fail_threshold": "3",
     "health_concurrency": "20",
-    "schedule.refresh": "",                    # HH:MM daily, blank = off
-    "schedule.health": "",
-    "schedule.reset_passes": "",
-    "schedule.refresh_dvr_m3u": "",
+    "schedule.refresh": "01:30",               # HH:MM daily, blank = off; default night run ends by 04:00
+    "schedule.health": "01:00",                # health first so the refresh fails over dead streams immediately
+    "schedule.reset_passes": "04:00",
+    "schedule.refresh_dvr_m3u": "03:00",
     "base_url": "",                            # external URL of this app for m3u links; blank = derive from request
     "auto_rule_on_assign": "1",                # manual assign/ignore also creates a matching equals rule
     "auto_assign_normalized": "1",             # unmatched source channels attach to channels by normalized name
     "auto_create_channels": "0",               # ...and create the channel when nothing matches
     "provider_order": "[]",                    # JSON list: provider prefixes (samsung, stirr, ...) best-first
+    "prerefresh_url": "",                      # POSTed before each refresh (e.g. FastChannels /api/sources/force-refresh)
+    "prerefresh_wait_min": "",                 # minutes to wait after the hook so the source can rebuild
+    "timezone": "",                            # IANA name (America/Chicago) for schedules/timestamps; blank = system
 }
 
 
@@ -155,6 +160,17 @@ def get_setting(key, default=""):
 
 def set_setting(key, value):
     execute("INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, str(value)))
+
+
+def local_now():
+    """Now in the configured timezone (setting 'timezone'), or system time."""
+    tz = get_setting("timezone").strip()
+    if tz:
+        try:
+            return datetime.datetime.now(zoneinfo.ZoneInfo(tz))
+        except Exception:
+            pass
+    return datetime.datetime.now()
 
 
 def attrs_of(row):

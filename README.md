@@ -66,15 +66,18 @@ Ten minutes, start to finish:
 | Manual assign/ignore creates a rule | Assign page actions also insert the matching equals rule (default on) |
 | Auto-assign by normalized name | Unmatched source channels attach to channels by collapsed-name match (default on) |
 | Auto-create channels | Create the channel when nothing matches — hands-off lineup building (default off) |
+| Pre-refresh hook URL | POSTed before each refresh so an upstream source can rebuild first (e.g. a FastChannels force-refresh endpoint); blank = off |
+| Pre-refresh wait | Minutes to wait after the hook before fetching sources |
 | Health: fail threshold | Consecutive failed checks before a stream is marked unhealthy |
 | Health: concurrency | Parallel stream checks |
-| Daily schedule | HH:MM per job, blank = off |
+| Time zone | IANA zone (e.g. `America/Chicago`) for the schedule and log timestamps; blank = server default |
+| Daily schedule | HH:MM per job, blank = off. Defaults to a night run that ends by 04:00: health 01:00 → refresh 01:30 → DVR m3u re-pull 03:00 → reset passes 04:00 |
 
 ## Jobs
 
 | Job | What it does |
 |---|---|
-| refresh | Fetch all sources → apply rules → regenerate outputs (→ push to DVR if enabled) |
+| refresh | (POST pre-refresh hook + wait, if set) → fetch all sources → apply rules → regenerate outputs (→ push to DVR if enabled) |
 | apply_rules | Just the rule pass — quick iteration while building rules |
 | health | Probe every stream, mark unhealthy ones for failover |
 | reset_passes | Pause/resume every DVR pass and force all guide lineups to re-download |

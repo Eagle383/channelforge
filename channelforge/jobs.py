@@ -1,5 +1,4 @@
 """Background job runner (one heavy job at a time) and daily scheduler."""
-import datetime
 import threading
 import time
 import traceback
@@ -18,7 +17,7 @@ JOB_TYPES = {
 
 
 def _now():
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return db.local_now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def start_job(job_type, extra=None):
@@ -55,7 +54,7 @@ def scheduler_loop():
     """Fire jobs at their configured HH:MM once per day."""
     fired = {}  # key -> date fired
     while True:
-        now = datetime.datetime.now()
+        now = db.local_now()
         hhmm = now.strftime("%H:%M")
         today = now.date()
         for key, job_type in (("schedule.refresh", "refresh"), ("schedule.health", "health"),

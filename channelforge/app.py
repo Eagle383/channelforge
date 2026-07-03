@@ -393,7 +393,8 @@ def jobs_run(request: Request, job_type: str = Form(...)):
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
     s = {r["key"]: r["value"] for r in db.q("SELECT * FROM settings")}
-    return render("settings.html", request, s=s, dvr_status=channels_dvr.ping())
+    return render("settings.html", request, s=s, dvr_status=channels_dvr.ping(),
+                  tznow=db.local_now().strftime("%H:%M"))
 
 
 @app.post("/settings")

@@ -40,6 +40,13 @@
       </select>
     </label>
   </div>
+  <h2>Pre-refresh hook</h2>
+  <div class="grid">
+    <label>URL to POST before each refresh, so the upstream source rebuilds first (blank = off; e.g. FastChannels force-refresh)
+      <input name="prerefresh_url" value="{{ s['prerefresh_url'] }}" placeholder="http://192.168.1.10:5523/api/sources/force-refresh"></label>
+    <label>Minutes to wait after the hook before fetching sources
+      <input name="prerefresh_wait_min" type="number" value="{{ s['prerefresh_wait_min'] }}" placeholder="30"></label>
+  </div>
   <h2>Health checks</h2>
   <div class="grid">
     <label>Mark unhealthy after N consecutive fails <input name="health_fail_threshold" type="number" value="{{ s['health_fail_threshold'] }}"></label>
@@ -47,10 +54,12 @@
   </div>
   <h2>Daily schedule (HH:MM, 24h; blank = off)</h2>
   <div class="grid">
-    <label>Refresh sources &amp; outputs <input name="schedule.refresh" value="{{ s['schedule.refresh'] }}" placeholder="03:30"></label>
-    <label>Stream health checks <input name="schedule.health" value="{{ s['schedule.health'] }}" placeholder="04:30"></label>
-    <label>Reset DVR passes <input name="schedule.reset_passes" value="{{ s['schedule.reset_passes'] }}" placeholder="05:00"></label>
-    <label>Refresh DVR m3u sources <input name="schedule.refresh_dvr_m3u" value="{{ s['schedule.refresh_dvr_m3u'] }}" placeholder="05:10"></label>
+    <label>Time zone (IANA name; blank = server default) — schedule clock now reads <span class="badge">{{ tznow }}</span>
+      <input name="timezone" value="{{ s['timezone'] }}" placeholder="America/Chicago"></label>
+    <label>Stream health checks (before refresh, so it fails over dead streams) <input name="schedule.health" value="{{ s['schedule.health'] }}" placeholder="01:00"></label>
+    <label>Refresh sources &amp; outputs <input name="schedule.refresh" value="{{ s['schedule.refresh'] }}" placeholder="01:30"></label>
+    <label>Refresh DVR m3u sources <input name="schedule.refresh_dvr_m3u" value="{{ s['schedule.refresh_dvr_m3u'] }}" placeholder="03:00"></label>
+    <label>Reset DVR passes <input name="schedule.reset_passes" value="{{ s['schedule.reset_passes'] }}" placeholder="04:00"></label>
   </div>
   <p><button>Save settings</button></p>
 </form>
