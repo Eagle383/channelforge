@@ -242,7 +242,7 @@ def _merge_group(keeper_row, losers, log=lambda s: None):
     for loser in losers:
         db.execute("UPDATE source_channels SET channel_id = ? WHERE channel_id = ?", (keeper["id"], loser["id"]))
         db.execute("UPDATE rules SET target_channel_id = ? WHERE target_channel_id = ?", (keeper["id"], loser["id"]))
-        for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description"):
+        for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_provider"):
             if not keeper[f] and loser[f]:
                 keeper[f] = loser[f]
         if keeper["preferred_source_id"] is None:
@@ -250,8 +250,8 @@ def _merge_group(keeper_row, losers, log=lambda s: None):
         keeper["attrs"] = json.dumps({**json.loads(loser["attrs"] or "{}"), **json.loads(keeper["attrs"] or "{}")})
         db.execute("DELETE FROM channels WHERE id = ?", (loser["id"],))
         log(f"  merged '{loser['name']}' into '{keeper['name']}'")
-    db.execute("UPDATE channels SET number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=?, preferred_source_id=?, attrs=? WHERE id=?",
-               tuple(keeper[f] for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_source_id", "attrs")) + (keeper["id"],))
+    db.execute("UPDATE channels SET number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=?, preferred_provider=?, preferred_source_id=?, attrs=? WHERE id=?",
+               tuple(keeper[f] for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_provider", "preferred_source_id", "attrs")) + (keeper["id"],))
     return len(losers)
 
 

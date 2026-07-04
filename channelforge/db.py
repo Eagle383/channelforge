@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS channels (                   -- canonical lineup entr
     grp TEXT DEFAULT '',
     description TEXT DEFAULT '',
     preferred_source_id INTEGER DEFAULT NULL,
+    preferred_provider TEXT NOT NULL DEFAULT '',
     attrs TEXT NOT NULL DEFAULT '{}'                    -- extra tvc-* overrides as JSON
 );
 CREATE INDEX IF NOT EXISTS idx_channels_name ON channels(name);
@@ -144,10 +145,17 @@ def init():
     conn = connect()
     with conn:
         conn.executescript(SCHEMA)
+        _ensure_column(conn, "channels", "preferred_provider", "TEXT NOT NULL DEFAULT ''")
         for k, v in DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)", (k, v))
         # jobs left 'running' by a previous process are dead; don't let them wedge the UI
         conn.execute("UPDATE jobs SET status = 'failed', log = log || 'interrupted by restart\n' WHERE status = 'running'")
+
+
+def _ensure_column(conn, table, column, definition):
+    cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def q(sql, params=()):

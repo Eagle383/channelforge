@@ -96,6 +96,12 @@ def assigned_children():
     return by_channel
 
 
+def provider_label(child):
+    """Provider shown to users: combined-feed prefix, or the source name when
+    the channel id has no provider prefix."""
+    return m3u.provider_of(child["external_id"]) or child["src_name"]
+
+
 def effective_genres(channel_row, best_child):
     """The tvc-guide-genres value the outputs emit for this channel — the DVR's
     collections depend on it. Precedence: channel override, the winning
@@ -108,13 +114,22 @@ def effective_genres(channel_row, best_child):
     return battrs.get("tvc-guide-genres") or channel_row["grp"] or battrs.get("group-title", "")
 
 
-def pick_stream(children_rows, preferred_source_id):
-    """children_rows sorted by source priority; return best (row, format)."""
+def pick_stream(children_rows, preferred_source_id=None, preferred_provider=""):
+    """children_rows sorted by normal priority; return best (row, format).
+
+    A per-channel provider preference wins over the normal source/provider
+    order when that provider has an available stream. Health still wins first.
+    """
     candidates = [c for c in children_rows if c["present"] and not c["ignored"]]
     healthy = [c for c in candidates if c["healthy"]]
     pool = healthy or candidates
     if not pool:
         return None, None
+    preferred_provider = (preferred_provider or "").strip()
+    if preferred_provider:
+        for c in pool:
+            if provider_label(c) == preferred_provider:
+                return c, c["stream_format_override"] or c["src_format"]
     if preferred_source_id:
         for c in pool:
             if c["source_id"] == preferred_source_id:
@@ -155,7 +170,7 @@ def build_outputs(log=lambda s: None):
         auto_no = max([int(start) - 1] + [n for n in taken if n >= int(start)]) + 1
 
     for ch in channels:
-        best, fmt = pick_stream(by_channel.get(ch["id"], []), ch["preferred_source_id"])
+        best, fmt = pick_stream(by_channel.get(ch["id"], []), ch["preferred_source_id"], ch["preferred_provider"])
         if best is None:
             skipped += 1
             continue

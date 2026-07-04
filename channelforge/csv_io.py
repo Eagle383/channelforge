@@ -9,7 +9,7 @@ import io
 
 from . import db
 
-CHANNEL_COLS = ["id", "name", "active", "number", "gracenote_id", "tvg_id", "logo", "grp", "description"]
+CHANNEL_COLS = ["id", "name", "active", "number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_provider"]
 RULE_COLS = ["id", "name", "priority", "active", "source_name", "match_field", "match_type", "pattern", "action", "target_channel", "set_field", "set_value"]
 ASSIGN_COLS = ["id", "source_name", "external_id", "name", "assigned_channel", "ignored", "stream_format_override"]
 
@@ -79,16 +79,24 @@ def _resolve_channel(value, by_name):
 
 def import_channels(data):
     n_upd = n_new = 0
-    for r in _reader(data):
+    rows = _reader(data)
+    has_preferred_provider = "preferred_provider" in (rows.fieldnames or [])
+    for r in rows:
         vals = (r.get("name", ""), 1 if str(r.get("active", "1")).strip() in ("1", "On", "true", "True") else 0,
                 r.get("number", ""), r.get("gracenote_id", ""), r.get("tvg_id", ""),
                 r.get("logo", ""), r.get("grp", ""), r.get("description", ""))
         rid = (r.get("id") or "").strip()
         if rid.isdigit() and db.q1("SELECT 1 FROM channels WHERE id = ?", (int(rid),)):
-            db.execute("UPDATE channels SET name=?, active=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=? WHERE id=?", vals + (int(rid),))
+            if has_preferred_provider:
+                db.execute("UPDATE channels SET name=?, active=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=?, preferred_provider=? WHERE id=?",
+                           vals + (r.get("preferred_provider", ""), int(rid)))
+            else:
+                db.execute("UPDATE channels SET name=?, active=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=? WHERE id=?",
+                           vals + (int(rid),))
             n_upd += 1
         elif vals[0].strip():
-            db.execute("INSERT INTO channels(name, active, number, gracenote_id, tvg_id, logo, grp, description) VALUES(?,?,?,?,?,?,?,?)", vals)
+            db.execute("INSERT INTO channels(name, active, number, gracenote_id, tvg_id, logo, grp, description, preferred_provider) VALUES(?,?,?,?,?,?,?,?,?)",
+                       vals + (r.get("preferred_provider", ""),))
             n_new += 1
     return f"channels: {n_upd} updated, {n_new} added"
 
