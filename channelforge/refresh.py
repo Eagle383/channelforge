@@ -134,6 +134,18 @@ def build_outputs(log=lambda s: None):
     signature_tvg_ids = set()
     skipped = 0
 
+    def add_signature_id(value):
+        value = (value or "").strip()
+        if value:
+            signature_tvg_ids.add(value)
+
+    def add_child_signature_ids(child):
+        add_signature_id(child["external_id"])
+        add_signature_id(child["name"])
+        attrs = db.attrs_of(child)
+        for field in ("channel-id", "tvg-id", "tvc-guide-stationid", "tvg-name", "tvc-guide-title"):
+            add_signature_id(attrs.get(field))
+
     # auto-numbering: hand out numbers from output_start_number upward, skipping
     # ones already taken, and persist each onto its channel so they stay stable
     start = (db.get_setting("output_start_number") or "").strip()
@@ -148,12 +160,11 @@ def build_outputs(log=lambda s: None):
             skipped += 1
             continue
         child_attrs = json.loads(best["attrs"] or "{}")
-        if ch["tvg_id"]:
-            signature_tvg_ids.add(ch["tvg_id"])
+        add_signature_id(ch["tvg_id"])
+        add_signature_id(ch["gracenote_id"])
+        add_signature_id(ch["name"])
         for child in by_channel.get(ch["id"], []):
-            child_tvg = db.attrs_of(child).get("tvg-id", "").strip()
-            if child_tvg:
-                signature_tvg_ids.add(child_tvg)
+            add_child_signature_ids(child)
         overrides = json.loads(ch["attrs"] or "{}")
         attrs = dict(child_attrs)
         attrs["channel-id"] = f"cf-{ch['id']}"
@@ -217,8 +228,8 @@ def build_outputs(log=lambda s: None):
             files.append(f"{fname} ({len(chunk)} channels)")
 
     # combined guide for the epg lineups, streamed to disk to bound memory.
-    # Duplicate review indexes every assigned source tvg-id, including channels
-    # whose output uses Gracenote and therefore is not written to cf_guide.xml.
+    # Duplicate review indexes every assigned source guide identifier, including
+    # channels whose output uses Gracenote and is not written to cf_guide.xml.
     db.execute("DELETE FROM guide_signatures")
     if wanted_tvg_ids or signature_tvg_ids:
         blobs = []

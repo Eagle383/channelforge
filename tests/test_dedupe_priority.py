@@ -213,6 +213,32 @@ class DedupePriorityTests(unittest.TestCase):
         child = db.q1("SELECT channel_id FROM source_channels WHERE external_id = ?", ("two.big12",))
         self.assertEqual(child["channel_id"], keeper)
 
+    def test_merge_duplicates_uses_programme_lineups_from_station_and_provider_ids(self):
+        source = self.add_source("fastchannels")
+        keeper = self.add_channel("Big 12 Network", gracenote_id="163942")
+        loser = self.add_channel("Big 12 Studios")
+        keys = ["byu-cincinnati-2100", "utah-byu-0000"]
+        self.add_signature("163942", keys)
+        self.add_signature("roku.955058d03806e22dbb37bf1ee8d681a1", keys)
+        self.add_child(
+            source, keeper, "freelivesports.big12network", "Big 12 Network",
+            attrs={"tvc-guide-stationid": "163942"},
+        )
+        self.add_child(
+            source, loser, "roku.955058d03806e22dbb37bf1ee8d681a1", "Big 12 Studios",
+            attrs={"tvg-id": "roku.955058d03806e22dbb37bf1ee8d681a1"},
+        )
+
+        merged = rules.merge_duplicates()
+
+        self.assertEqual(merged, 1)
+        self.assertIsNone(db.q1("SELECT 1 FROM channels WHERE id = ?", (loser,)))
+        child = db.q1(
+            "SELECT channel_id FROM source_channels WHERE external_id = ?",
+            ("roku.955058d03806e22dbb37bf1ee8d681a1",),
+        )
+        self.assertEqual(child["channel_id"], keeper)
+
     def test_xmltv_write_combined_returns_programme_signatures(self):
         out_path = os.path.join(self.tmp.name, "guide.xml")
         xml = b"""<tv>
@@ -263,6 +289,20 @@ class DedupePriorityTests(unittest.TestCase):
             written = fh.read()
         self.assertIn(b'channel="alpha.epg"', written)
         self.assertNotIn(b'channel="gracenote-source.epg"', written)
+
+    def test_xmltv_indexes_signatures_by_channel_display_name_alias(self):
+        out_path = os.path.join(self.tmp.name, "guide.xml")
+        xml = b"""<tv>
+          <channel id="opaque.123"><display-name>Big 12 Network</display-name></channel>
+          <programme start="20260704210000 +0000" channel="opaque.123"><title>BYU vs. Cincinnati Football Full Game Replay</title></programme>
+          <programme start="20260705000000 +0000" channel="opaque.123"><title>Utah vs. BYU Football Full Game Replay</title></programme>
+        </tv>"""
+
+        _kept, signatures = xmltv.write_combined(
+            [xml], set(), out_path, {"Big 12 Network"})
+
+        self.assertIn("Big 12 Network", signatures)
+        self.assertEqual(signatures["Big 12 Network"]["n"], 2)
 
     def test_dupes_page_suggests_keeper_by_output_stream_priority(self):
         hi = self.add_source("high", priority=1)
@@ -332,6 +372,24 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertIn("Alpha One", html)
         self.assertIn("Zulu Two", html)
         self.assertNotIn("CBS News Atlanta", html)
+
+    def test_dupes_page_shows_short_lineup_samples_from_source_external_ids(self):
+        source = self.add_source("fastchannels")
+        a = self.add_channel("Big 12 Network")
+        b = self.add_channel("Big 12 Studios")
+        keys = ["byu-cincinnati-2100", "utah-byu-0000"]
+        self.add_signature("freelivesports.big12network", keys)
+        self.add_signature("roku.big12studios", keys)
+        self.add_child(source, a, "freelivesports.big12network", "Big 12 Network")
+        self.add_child(source, b, "roku.big12studios", "Big 12 Studios")
+
+        with TestClient(webapp.app) as client:
+            response = client.get("/dupes")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("same guide programme lineup", html)
+        self.assertIn("lineup: Show A | Show B", html)
 
     def test_dupes_page_can_bulk_dismiss_visible_weak_groups(self):
         self.add_channel("CNA")

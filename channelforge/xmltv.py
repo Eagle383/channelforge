@@ -60,7 +60,34 @@ def _add_signature_item(signatures, samples, channel_id, elem):
         samples[channel_id].append(title)
 
 
-def _stream_matching(blob, tag, wanted_ids, id_attr, out, seen=None, signatures=None, samples=None):
+def _channel_signature_aliases(blob, signature_ids):
+    """Map XMLTV channel ids to requested signature ids carried by display-name."""
+    aliases = {}
+    src_root = None
+    try:
+        for event, elem in ET.iterparse(io.BytesIO(blob), events=("start", "end")):
+            if event == "start":
+                if src_root is None:
+                    src_root = elem
+                continue
+            if elem.tag == "channel":
+                channel_id = (elem.get("id") or "").strip()
+                if channel_id:
+                    if channel_id in signature_ids:
+                        aliases.setdefault(channel_id, set()).add(channel_id)
+                    for display in elem.findall("display-name"):
+                        name = (display.text or "").strip()
+                        if name in signature_ids:
+                            aliases.setdefault(channel_id, set()).add(name)
+                src_root.clear()
+            elif elem.tag in ("channel", "programme"):
+                src_root.clear()
+    except ET.ParseError:
+        pass
+    return aliases
+
+
+def _stream_matching(blob, tag, wanted_ids, id_attr, out, seen=None, signatures=None, samples=None, signature_aliases=None):
     """Write every <tag> element whose id attribute is wanted straight to `out`."""
     src_root = None
     try:
@@ -76,7 +103,8 @@ def _stream_matching(blob, tag, wanted_ids, id_attr, out, seen=None, signatures=
                         seen.add(key)
                     out.write(ET.tostring(elem, encoding="utf-8"))
                 if tag == "programme" and signatures is not None and samples is not None:
-                    _add_signature_item(signatures, samples, key, elem)
+                    for signature_id in (signature_aliases or {}).get(key, (key,)):
+                        _add_signature_item(signatures, samples, signature_id, elem)
                 src_root.clear()
             elif elem.tag in ("channel", "programme"):
                 src_root.clear()
@@ -94,6 +122,10 @@ def write_combined(xml_blobs, wanted_ids, out_path, signature_ids=None):
     seen_channels = set()
     signatures = {i: [] for i in signature_ids}
     samples = {i: [] for i in signature_ids}
+    signature_aliases = {}
+    for blob in blobs:
+        for channel_id, aliases in _channel_signature_aliases(blob, signature_ids).items():
+            signature_aliases.setdefault(channel_id, set()).update(aliases)
     with open(out_path, "wb") as out:
         out.write(b'<?xml version="1.0" encoding="utf-8"?>\n')
         out.write(b'<tv generator-info-name="channelforge">\n')
@@ -101,7 +133,7 @@ def write_combined(xml_blobs, wanted_ids, out_path, signature_ids=None):
             _stream_matching(blob, "channel", wanted_ids, "id", out, seen_channels)
         for blob in blobs:
             _stream_matching(blob, "programme", wanted_ids, "channel", out,
-                             signatures=signatures, samples=samples)
+                             signatures=signatures, samples=samples, signature_aliases=signature_aliases)
         out.write(b"</tv>\n")
     signatures = {
         tvg_id: {"signature": keys, "sample": " | ".join(samples[tvg_id]), "n": len(keys)}

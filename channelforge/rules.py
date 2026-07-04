@@ -269,6 +269,7 @@ _STOP_TOKENS = {
     "channel", "free", "hd", "live", "network", "news", "now", "plus", "tv",
 }
 _GUIDE_ID_FIELDS = ("tvc-guide-stationid", "tvg-id")
+_GUIDE_LINEUP_ID_FIELDS = ("channel-id", "tvg-id", "tvc-guide-stationid", "tvg-name", "tvc-guide-title")
 _GUIDE_DESC_FIELDS = ("tvc-guide-description", "tvg-description")
 
 
@@ -313,17 +314,25 @@ def _programme_lineup_pairs(channel_ids):
     signatures = {r["tvg_id"]: _signature_keys(r) for r in db.q("SELECT tvg_id, signature FROM guide_signatures WHERE n >= 2")}
     schedule_keys = {}
 
-    def add_schedule(cid, tvg_id):
+    def add_schedule(cid, guide_id):
         if cid not in channel_ids:
             return
-        keys = signatures.get((tvg_id or "").strip())
+        keys = signatures.get((guide_id or "").strip())
         if keys:
             schedule_keys.setdefault(cid, set()).update(keys)
 
-    for c in db.q("SELECT id, tvg_id FROM channels"):
+    for c in db.q("SELECT id, name, gracenote_id, tvg_id FROM channels"):
         add_schedule(c["id"], c["tvg_id"])
-    for row in db.q("SELECT channel_id, attrs FROM source_channels WHERE present = 1 AND channel_id IS NOT NULL"):
-        add_schedule(row["channel_id"], db.attrs_of(row).get("tvg-id"))
+        add_schedule(c["id"], c["gracenote_id"])
+        add_schedule(c["id"], c["name"])
+    for row in db.q("""SELECT channel_id, external_id, name, attrs
+                       FROM source_channels
+                       WHERE present = 1 AND channel_id IS NOT NULL"""):
+        add_schedule(row["channel_id"], row["external_id"])
+        add_schedule(row["channel_id"], row["name"])
+        attrs = db.attrs_of(row)
+        for field in _GUIDE_LINEUP_ID_FIELDS:
+            add_schedule(row["channel_id"], attrs.get(field))
 
     programme_posting = {}
     for cid, keys in schedule_keys.items():

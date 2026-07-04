@@ -197,7 +197,7 @@ def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int
     pick_pool = refresh.assigned_children()
     provider_rank = {p: i for i, p in enumerate(json.loads(db.get_setting("provider_order") or "[]"))}
     unranked_provider = len(provider_rank)
-    guide_samples = {r["tvg_id"]: r["sample"] for r in db.q("SELECT tvg_id, sample FROM guide_signatures WHERE n >= 8")}
+    guide_samples = {r["tvg_id"]: r["sample"] for r in db.q("SELECT tvg_id, sample FROM guide_signatures WHERE n >= 2")}
 
     def add_guide(cid, label, value):
         value = (value or "").strip()
@@ -205,7 +205,13 @@ def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int
             return
         guide.setdefault(cid, {}).setdefault(label, set()).add(value)
 
-    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, sc.attrs, s.name sname
+    def add_lineup_sample(cid, *guide_ids):
+        for guide_id in guide_ids:
+            sample = guide_samples.get((guide_id or "").strip())
+            if sample:
+                add_guide(cid, "lineup", sample)
+
+    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, sc.name cname, sc.attrs, s.name sname
                      FROM source_channels sc JOIN sources s ON s.id = sc.source_id
                      WHERE sc.present = 1 AND sc.channel_id IS NOT NULL"""):
         provs.setdefault(k["cid"], set()).add(m3u.provider_of(k["ext"]) or k["sname"])
@@ -216,12 +222,20 @@ def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int
         add_guide(k["cid"], "tvg", tvg_id)
         add_guide(k["cid"], "title", attrs.get("tvc-guide-title") or attrs.get("tvg-name"))
         add_guide(k["cid"], "desc", attrs.get("tvc-guide-description") or attrs.get("tvg-description"))
-        add_guide(k["cid"], "lineup", guide_samples.get(tvg_id))
+        add_lineup_sample(
+            k["cid"], k["ext"], k["cname"],
+            attrs.get("channel-id"), tvg_id, attrs.get("tvc-guide-stationid"),
+            attrs.get("tvg-name"), attrs.get("tvc-guide-title"),
+        )
 
     def guide_hint(c):
         data = {k: set(v) for k, v in guide.get(c["id"], {}).items()}
+        if c["gracenote_id"]:
+            data.setdefault("station", set()).add(c["gracenote_id"])
         if c["tvg_id"]:
-            add = guide_samples.get(c["tvg_id"])
+            data.setdefault("tvg", set()).add(c["tvg_id"])
+        for guide_id in (c["tvg_id"], c["gracenote_id"], c["name"]):
+            add = guide_samples.get((guide_id or "").strip())
             if add:
                 data.setdefault("lineup", set()).add(add)
         parts = []
