@@ -6,7 +6,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from channelforge import app as webapp
-from channelforge import db, refresh, rules, xmltv
+from channelforge import channels_dvr, db, refresh, rules, xmltv
 
 
 def reset_db(data_dir):
@@ -239,6 +239,25 @@ class DedupePriorityTests(unittest.TestCase):
         )
         self.assertEqual(child["channel_id"], keeper)
 
+    def test_merge_duplicates_uses_programme_lineups_from_dvr_guide_numbers(self):
+        source = self.add_source("fastchannels")
+        keeper = self.add_channel("Big 12 Network")
+        loser = self.add_channel("Big 12 Studios")
+        db.execute("UPDATE channels SET number = '1204' WHERE id = ?", (keeper,))
+        keys = ["byu-cincinnati-2100", "utah-byu-0000"]
+        self.add_signature("1204", keys)
+        self.add_signature("roku.955058d03806e22dbb37bf1ee8d681a1", keys)
+        self.add_child(source, keeper, "freelivesports.big12network", "Big 12 Network")
+        self.add_child(
+            source, loser, "roku.955058d03806e22dbb37bf1ee8d681a1", "Big 12 Studios",
+            attrs={"tvg-id": "roku.955058d03806e22dbb37bf1ee8d681a1"},
+        )
+
+        merged = rules.merge_duplicates()
+
+        self.assertEqual(merged, 1)
+        self.assertIsNone(db.q1("SELECT 1 FROM channels WHERE id = ?", (loser,)))
+
     def test_xmltv_write_combined_returns_programme_signatures(self):
         out_path = os.path.join(self.tmp.name, "guide.xml")
         xml = b"""<tv>
@@ -303,6 +322,45 @@ class DedupePriorityTests(unittest.TestCase):
 
         self.assertIn("Big 12 Network", signatures)
         self.assertEqual(signatures["Big 12 Network"]["n"], 2)
+
+    def test_channels_dvr_guide_signatures_use_station_name_and_number(self):
+        class Response:
+            def json(self):
+                return [
+                    {
+                        "GuideNumber": "1204",
+                        "GuideName": "Big 12 Network",
+                        "StationID": "163942",
+                        "Programs": [
+                            {"Title": "BYU vs. Cincinnati Football Full Game Replay", "StartTime": "20260704210000 +0000"},
+                            {"Title": "Utah vs. BYU Football Full Game Replay", "StartTime": "20260705000000 +0000"},
+                        ],
+                    }
+                ]
+
+        class Client:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def get(self, *_args, **_kwargs):
+                return Response()
+
+        old_base_urls = channels_dvr.base_urls
+        old_client = channels_dvr._client
+        try:
+            channels_dvr.base_urls = lambda: ["http://dvr.test:8089"]
+            channels_dvr._client = lambda: Client()
+
+            signatures = channels_dvr.guide_signatures(
+                {"1204", "163942", "Big 12 Network"}, lambda _s: None)
+
+            self.assertEqual(signatures["1204"]["n"], 2)
+            self.assertEqual(signatures["163942"]["signature"], signatures["1204"]["signature"])
+            self.assertEqual(signatures["Big 12 Network"]["signature"], signatures["1204"]["signature"])
+        finally:
+            channels_dvr.base_urls = old_base_urls
+            channels_dvr._client = old_client
 
     def test_dupes_page_suggests_keeper_by_output_stream_priority(self):
         hi = self.add_source("high", priority=1)
@@ -402,6 +460,21 @@ class DedupePriorityTests(unittest.TestCase):
             refresh.run_refresh(lambda _s: None, skip_hook=True)
 
             self.assertEqual(calls, ["build", "merge", "build"])
+        finally:
+            refresh.build_outputs = old_build_outputs
+            rules.merge_duplicates = old_merge_duplicates
+
+    def test_standalone_dedupe_refreshes_guide_signatures_first(self):
+        calls = []
+        old_build_outputs = refresh.build_outputs
+        old_merge_duplicates = rules.merge_duplicates
+        try:
+            refresh.build_outputs = lambda log=lambda s: None: calls.append("build")
+            rules.merge_duplicates = lambda log=lambda s: None: calls.append("merge") or 0
+
+            refresh.run_dedupe(lambda _s: None)
+
+            self.assertEqual(calls, ["build", "merge"])
         finally:
             refresh.build_outputs = old_build_outputs
             rules.merge_duplicates = old_merge_duplicates

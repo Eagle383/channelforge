@@ -12,7 +12,7 @@ JOB_TYPES = {
     "refresh": refresh.run_refresh,
     "quick_refresh": refresh.run_quick_refresh,
     "apply_rules": rules.apply_all,
-    "dedupe": rules.merge_duplicates,
+    "dedupe": refresh.run_dedupe,
     "health": health.run_health_checks,
     "reset_passes": channels_dvr.reset_passes,
     "refresh_dvr_m3u": channels_dvr.refresh_m3u_playlists,

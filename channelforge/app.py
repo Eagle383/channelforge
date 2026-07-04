@@ -224,8 +224,8 @@ def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int
         add_guide(k["cid"], "desc", attrs.get("tvc-guide-description") or attrs.get("tvg-description"))
         add_lineup_sample(
             k["cid"], k["ext"], k["cname"],
-            attrs.get("channel-id"), tvg_id, attrs.get("tvc-guide-stationid"),
-            attrs.get("tvg-name"), attrs.get("tvc-guide-title"),
+            attrs.get("channel-id"), attrs.get("channel-number"), tvg_id, attrs.get("tvg-name"),
+            attrs.get("tvg-chno"), attrs.get("tvc-guide-stationid"), attrs.get("tvc-guide-title"),
         )
 
     def guide_hint(c):
@@ -234,7 +234,7 @@ def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int
             data.setdefault("station", set()).add(c["gracenote_id"])
         if c["tvg_id"]:
             data.setdefault("tvg", set()).add(c["tvg_id"])
-        for guide_id in (c["tvg_id"], c["gracenote_id"], c["name"]):
+        for guide_id in (c["tvg_id"], c["gracenote_id"], c["name"], c["number"]):
             add = guide_samples.get((guide_id or "").strip())
             if add:
                 data.setdefault("lineup", set()).add(add)

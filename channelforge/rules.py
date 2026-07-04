@@ -269,7 +269,7 @@ _STOP_TOKENS = {
     "channel", "free", "hd", "live", "network", "news", "now", "plus", "tv",
 }
 _GUIDE_ID_FIELDS = ("tvc-guide-stationid", "tvg-id")
-_GUIDE_LINEUP_ID_FIELDS = ("channel-id", "tvg-id", "tvc-guide-stationid", "tvg-name", "tvc-guide-title")
+_GUIDE_LINEUP_ID_FIELDS = ("channel-id", "channel-number", "tvg-id", "tvg-name", "tvg-chno", "tvc-guide-stationid", "tvc-guide-title")
 _GUIDE_DESC_FIELDS = ("tvc-guide-description", "tvg-description")
 
 
@@ -321,10 +321,11 @@ def _programme_lineup_pairs(channel_ids):
         if keys:
             schedule_keys.setdefault(cid, set()).update(keys)
 
-    for c in db.q("SELECT id, name, gracenote_id, tvg_id FROM channels"):
+    for c in db.q("SELECT id, name, number, gracenote_id, tvg_id FROM channels"):
         add_schedule(c["id"], c["tvg_id"])
         add_schedule(c["id"], c["gracenote_id"])
         add_schedule(c["id"], c["name"])
+        add_schedule(c["id"], c["number"])
     for row in db.q("""SELECT channel_id, external_id, name, attrs
                        FROM source_channels
                        WHERE present = 1 AND channel_id IS NOT NULL"""):

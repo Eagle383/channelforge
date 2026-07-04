@@ -3,7 +3,10 @@ import re
 
 import httpx
 
-from . import db
+from . import db, xmltv
+
+_GUIDE_DURATION_SECONDS = 12 * 60 * 60
+_SIG_LIMIT = 96
 
 
 def base_urls():
@@ -34,6 +37,91 @@ def ping():
             status = f"unreachable: {e}"
         parts.append(status if len(urls) == 1 else f"{_host(url)}: {status}")
     return " | ".join(parts)
+
+
+def _first_list(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        for key in ("Channels", "channels", "Guide", "guide", "Items", "items"):
+            found = _first_list(value.get(key))
+            if found is not None:
+                return found
+    return None
+
+
+def _get_any(row, names):
+    if not isinstance(row, dict):
+        return ""
+    lower = {str(k).casefold(): v for k, v in row.items()}
+    for name in names:
+        value = lower.get(name.casefold())
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def _programmes(row):
+    for key in ("Programs", "programs", "Airings", "airings", "Listings", "listings"):
+        value = row.get(key) if isinstance(row, dict) else None
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _guide_ids(row):
+    fields = (
+        "StationID", "StationId", "stationID", "station_id", "TMSStationID",
+        "GuideNumber", "GuideName", "Name", "CallSign", "ChannelID", "ChannelId", "ID",
+    )
+    return {v for v in (_get_any(row, (field,)) for field in fields) if v}
+
+
+def guide_signatures(guide_ids, log=lambda s: None, duration=_GUIDE_DURATION_SECONDS):
+    """Programme-lineup fingerprints from Channels DVR's own guide JSON.
+
+    This fills the gap left by source XMLTV files: Gracenote-backed channels may
+    only have schedule data once Channels DVR resolves their station ids.
+    """
+    wanted = {str(i).strip() for i in guide_ids if str(i or "").strip()}
+    if not wanted:
+        return {}
+    urls = base_urls()
+    if not urls:
+        return {}
+    signatures, samples = {}, {}
+    for url in urls:
+        try:
+            with _client() as c:
+                payload = c.get(f"{url}/devices/ANY/guide", params={"duration": duration}).json()
+            rows = _first_list(payload) or []
+            log(f"  guide: fetched Channels DVR guide from {_host(url)}")
+        except Exception as e:
+            log(f"  guide: Channels DVR guide from {_host(url)} FAILED ({e})")
+            continue
+        for row in rows:
+            ids = _guide_ids(row) & wanted
+            if not ids:
+                continue
+            for program in _programmes(row):
+                title = _get_any(program, ("Title", "title", "Name", "name"))
+                start = _get_any(program, ("StartTime", "startTime", "Start", "start", "Time", "time"))
+                key = xmltv.programme_signature_key(title, start)
+                if not key:
+                    continue
+                for guide_id in ids:
+                    keys = signatures.setdefault(guide_id, [])
+                    if len(keys) >= _SIG_LIMIT:
+                        continue
+                    keys.append(key)
+                    titles = samples.setdefault(guide_id, [])
+                    if title and len(titles) < 4 and title not in titles:
+                        titles.append(title)
+    return {
+        guide_id: {"signature": keys, "sample": " | ".join(samples.get(guide_id, [])), "n": len(keys)}
+        for guide_id, keys in signatures.items()
+        if keys
+    }
 
 
 def reset_passes(log=lambda s: None):

@@ -143,7 +143,7 @@ def build_outputs(log=lambda s: None):
         add_signature_id(child["external_id"])
         add_signature_id(child["name"])
         attrs = db.attrs_of(child)
-        for field in ("channel-id", "tvg-id", "tvc-guide-stationid", "tvg-name", "tvc-guide-title"):
+        for field in ("channel-id", "channel-number", "tvg-id", "tvg-name", "tvg-chno", "tvc-guide-stationid", "tvc-guide-title"):
             add_signature_id(attrs.get(field))
 
     # auto-numbering: hand out numbers from output_start_number upward, skipping
@@ -163,6 +163,7 @@ def build_outputs(log=lambda s: None):
         add_signature_id(ch["tvg_id"])
         add_signature_id(ch["gracenote_id"])
         add_signature_id(ch["name"])
+        add_signature_id(ch["number"])
         for child in by_channel.get(ch["id"], []):
             add_child_signature_ids(child)
         overrides = json.loads(ch["attrs"] or "{}")
@@ -242,6 +243,10 @@ def build_outputs(log=lambda s: None):
         log(f"  guide: merging {len(blobs)} guides for {len(wanted_tvg_ids)} output station ids and indexing {len(signature_tvg_ids)} schedule ids...")
         guide_path = os.path.join(d, "cf_guide.xml")
         kept, signatures = xmltv.write_combined(blobs, wanted_tvg_ids, guide_path, signature_tvg_ids)
+        dvr_signatures = channels_dvr.guide_signatures(signature_tvg_ids, log)
+        for guide_id, data in dvr_signatures.items():
+            if data["n"] > signatures.get(guide_id, {}).get("n", 0):
+                signatures[guide_id] = data
         if signatures:
             updated = db.local_now().isoformat(timespec="seconds")
             db.executemany(
@@ -345,6 +350,15 @@ def run_quick_refresh(log=lambda s: None):
     run_refresh(log, skip_hook=True)
 
 
+def run_dedupe(log=lambda s: None):
+    """Refresh guide signatures, merge hard duplicates, then rebuild outputs."""
+    build_outputs(log)
+    merged = rules.merge_duplicates(log)
+    if merged:
+        build_outputs(log)
+    return merged
+
+
 def run_refresh(log=lambda s: None, skip_hook=False):
     if skip_hook:
         log("quick refresh: skipping the pre-refresh hook")
@@ -356,11 +370,10 @@ def run_refresh(log=lambda s: None, skip_hook=False):
         total += sync_source(source, log)
     log(f"total channels across sources: {total}")
     rules.apply_all(log)
-    build_outputs(log)
     if db.get_setting("auto_merge_duplicates") != "0":
-        merged = rules.merge_duplicates(log)
-        if merged:
-            build_outputs(log)
+        run_dedupe(log)
+    else:
+        build_outputs(log)
     if db.get_setting("push_outputs_to_dvr") == "1":
         base = (db.get_setting("base_url") or "").rstrip("/")
         if base:

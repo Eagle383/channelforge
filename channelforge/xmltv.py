@@ -6,7 +6,7 @@ import hashlib
 import io
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _SIG_LIMIT = 96
@@ -25,27 +25,55 @@ def _norm_text(text):
     return " ".join(_WORD_RE.findall((text or "").casefold()))
 
 
-def _rounded_start_key(start):
-    raw = (start or "").strip()[:12]  # YYYYMMDDHHMM, ignoring seconds/timezone text
-    if len(raw) != 12 or not raw.isdigit():
-        return ""
+def _start_datetime(start):
+    if isinstance(start, (int, float)):
+        ts = start / 1000 if start > 100000000000 else start
+        return datetime.fromtimestamp(ts, timezone.utc)
+    text = str(start or "").strip()
+    if not text:
+        return None
+    if text.isdigit() and len(text) <= 13:
+        ts = int(text)
+        ts = ts / 1000 if ts > 100000000000 else ts
+        return datetime.fromtimestamp(ts, timezone.utc)
+    m = re.match(r"^(\d{14}|\d{12})(?:\s*([+-]\d{4}))?", text)
+    if not m:
+        return None
+    raw, offset = m.groups()
     try:
-        dt = datetime.strptime(raw, "%Y%m%d%H%M")
+        dt = datetime.strptime(raw[:12], "%Y%m%d%H%M")
     except ValueError:
+        return None
+    if offset:
+        sign = 1 if offset[0] == "+" else -1
+        delta = timedelta(hours=int(offset[1:3]), minutes=int(offset[3:5]))
+        dt = dt.replace(tzinfo=timezone(sign * delta)).astimezone(timezone.utc)
+    return dt
+
+
+def _rounded_start_key(start):
+    dt = _start_datetime(start)
+    if dt is None:
         return ""
     dt += timedelta(minutes=(2 if dt.minute % 5 >= 3 else 0))
     dt -= timedelta(minutes=dt.minute % 5)
     return dt.strftime("%Y%m%d%H%M")
 
 
-def _programme_key(elem):
-    title = _norm_text(elem.findtext("title"))
+def programme_signature_key(title, start):
+    title = _norm_text(title)
     if not title:
-        return "", ""
-    start = _rounded_start_key(elem.get("start"))
+        return ""
+    start = _rounded_start_key(start)
     if not start:
+        return ""
+    return hashlib.sha1(f"{start}|{title}".encode("utf-8")).hexdigest()[:16]
+
+
+def _programme_key(elem):
+    key = programme_signature_key(elem.findtext("title"), elem.get("start"))
+    if not key:
         return "", ""
-    key = hashlib.sha1(f"{start}|{title}".encode("utf-8")).hexdigest()[:16]
     return key, elem.findtext("title") or ""
 
 
