@@ -218,7 +218,14 @@ def merge_duplicates(log=lambda s: None):
         # keep the plain name over a 'by <brand>' rename, active over inactive, oldest on ties
         group.sort(key=lambda c: (is_by_brand_alias(c["name"]), not c["active"], c["id"]))
         merged += _merge_group(group[0], group[1:], log)
-    log(f"dedupe: merged {merged} duplicate channels" if merged else "dedupe: no duplicates found")
+    if merged:
+        log(f"dedupe: merged {merged} hard duplicate channels")
+    else:
+        review_n = len(find_possible_duplicates())
+        msg = "dedupe: no hard-merge duplicates found"
+        if review_n:
+            msg += f"; {review_n} possible duplicate groups need manual review at /dupes"
+        log(msg)
     return merged
 
 

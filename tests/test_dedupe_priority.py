@@ -73,6 +73,18 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertIsNotNone(db.q1("SELECT 1 FROM channels WHERE id = ?", (a,)))
         self.assertIsNotNone(db.q1("SELECT 1 FROM channels WHERE id = ?", (b,)))
 
+    def test_merge_duplicates_log_points_to_manual_review_candidates(self):
+        messages = []
+        self.add_channel("CNA")
+        self.add_channel("CBS News Atlanta")
+
+        merged = rules.merge_duplicates(messages.append)
+
+        self.assertEqual(merged, 0)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("no hard-merge duplicates found", messages[0])
+        self.assertIn("1 possible duplicate groups need manual review", messages[0])
+
     def test_possible_duplicates_flags_alias_only_groups(self):
         self.add_channel("Duck Dynasty by A&E")
         self.add_channel("Duck Dynasty by History")

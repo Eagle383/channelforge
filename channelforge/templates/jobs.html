@@ -2,8 +2,8 @@
 {% block content %}
 <h1>Jobs</h1>
 <div class="bar">
-  {% for t in ['refresh', 'quick_refresh', 'apply_rules', 'dedupe', 'health', 'reset_passes', 'refresh_dvr_m3u'] %}
-  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="{{ t }}"><button class="quiet" {{ 'disabled' if running }}>{{ t }}</button></form>
+  {% for t, label in [('refresh', 'refresh'), ('quick_refresh', 'quick refresh'), ('apply_rules', 'apply rules'), ('dedupe', 'merge hard dupes'), ('health', 'health'), ('reset_passes', 'reset passes'), ('refresh_dvr_m3u', 'refresh dvr m3u')] %}
+  <form class="inline" method="post" action="/jobs/run"><input type="hidden" name="job_type" value="{{ t }}"><button class="quiet" {{ 'disabled' if running }}>{{ label }}</button></form>
   {% endfor %}
 </div>
 <table>
