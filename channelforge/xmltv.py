@@ -61,8 +61,8 @@ def _stream_matching(blob, tag, wanted_ids, id_attr, out, seen=None, signatures=
                     if seen is not None:
                         seen.add(key)
                     out.write(ET.tostring(elem, encoding="utf-8"))
-                    if tag == "programme" and signatures is not None and samples is not None:
-                        _add_signature_item(signatures, samples, key, elem)
+                if tag == "programme" and signatures is not None and samples is not None:
+                    _add_signature_item(signatures, samples, key, elem)
                 src_root.clear()
             elif elem.tag in ("channel", "programme"):
                 src_root.clear()
@@ -70,14 +70,16 @@ def _stream_matching(blob, tag, wanted_ids, id_attr, out, seen=None, signatures=
         pass
 
 
-def write_combined(xml_blobs, wanted_ids, out_path):
+def write_combined(xml_blobs, wanted_ids, out_path, signature_ids=None):
     """xml_blobs: list of raw bytes (possibly gzipped) XMLTV documents.
     Writes the merged, filtered guide to out_path. Returns
     (number of channels kept, programme signatures by tvg-id)."""
+    wanted_ids = set(wanted_ids)
+    signature_ids = set(wanted_ids if signature_ids is None else signature_ids)
     blobs = [_gunzip(b) for b in xml_blobs if b]
     seen_channels = set()
-    signatures = {i: [] for i in wanted_ids}
-    samples = {i: [] for i in wanted_ids}
+    signatures = {i: [] for i in signature_ids}
+    samples = {i: [] for i in signature_ids}
     with open(out_path, "wb") as out:
         out.write(b'<?xml version="1.0" encoding="utf-8"?>\n')
         out.write(b'<tv generator-info-name="channelforge">\n')

@@ -196,6 +196,26 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertEqual(signatures["alpha.epg"]["n"], 2)
         self.assertIn("Show A", signatures["alpha.epg"]["sample"])
 
+    def test_xmltv_indexes_signature_ids_outside_output_guide(self):
+        out_path = os.path.join(self.tmp.name, "guide.xml")
+        xml = b"""<tv>
+          <channel id="alpha.epg"><display-name>Alpha</display-name></channel>
+          <channel id="gracenote-source.epg"><display-name>Gracenote Source</display-name></channel>
+          <programme start="20260704010000 +0000" channel="alpha.epg"><title>Show A</title></programme>
+          <programme start="20260704010000 +0000" channel="gracenote-source.epg"><title>Show A</title></programme>
+        </tv>"""
+
+        kept, signatures = xmltv.write_combined(
+            [xml], {"alpha.epg"}, out_path, {"alpha.epg", "gracenote-source.epg"})
+
+        self.assertEqual(kept, 1)
+        self.assertIn("alpha.epg", signatures)
+        self.assertIn("gracenote-source.epg", signatures)
+        with open(out_path, "rb") as fh:
+            written = fh.read()
+        self.assertIn(b'channel="alpha.epg"', written)
+        self.assertNotIn(b'channel="gracenote-source.epg"', written)
+
     def test_dupes_page_suggests_keeper_by_output_stream_priority(self):
         hi = self.add_source("high", priority=1)
         lo = self.add_source("low", priority=100)

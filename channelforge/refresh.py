@@ -131,6 +131,7 @@ def build_outputs(log=lambda s: None):
 
     lineups = {("gracenote", "HLS"): [], ("gracenote", "MPEG-TS"): [], ("epg", "HLS"): [], ("epg", "MPEG-TS"): []}
     wanted_tvg_ids = set()
+    signature_tvg_ids = set()
     skipped = 0
 
     # auto-numbering: hand out numbers from output_start_number upward, skipping
@@ -147,6 +148,12 @@ def build_outputs(log=lambda s: None):
             skipped += 1
             continue
         child_attrs = json.loads(best["attrs"] or "{}")
+        if ch["tvg_id"]:
+            signature_tvg_ids.add(ch["tvg_id"])
+        for child in by_channel.get(ch["id"], []):
+            child_tvg = db.attrs_of(child).get("tvg-id", "").strip()
+            if child_tvg:
+                signature_tvg_ids.add(child_tvg)
         overrides = json.loads(ch["attrs"] or "{}")
         attrs = dict(child_attrs)
         attrs["channel-id"] = f"cf-{ch['id']}"
@@ -209,9 +216,11 @@ def build_outputs(log=lambda s: None):
                 fh.write(m3u.generate(chunk))
             files.append(f"{fname} ({len(chunk)} channels)")
 
-    # combined guide for the epg lineups, streamed to disk to bound memory
+    # combined guide for the epg lineups, streamed to disk to bound memory.
+    # Duplicate review indexes every assigned source tvg-id, including channels
+    # whose output uses Gracenote and therefore is not written to cf_guide.xml.
     db.execute("DELETE FROM guide_signatures")
-    if wanted_tvg_ids:
+    if wanted_tvg_ids or signature_tvg_ids:
         blobs = []
         for s in db.q("SELECT * FROM sources WHERE active = 1 AND epg_url != ''"):
             try:
@@ -219,8 +228,9 @@ def build_outputs(log=lambda s: None):
                 log(f"  guide: fetched {s['name']}")
             except Exception as e:
                 log(f"  guide: {s['name']} FAILED ({e})")
-        log(f"  guide: merging {len(blobs)} guides for {len(wanted_tvg_ids)} station ids...")
-        kept, signatures = xmltv.write_combined(blobs, wanted_tvg_ids, os.path.join(d, "cf_guide.xml"))
+        log(f"  guide: merging {len(blobs)} guides for {len(wanted_tvg_ids)} output station ids and indexing {len(signature_tvg_ids)} schedule ids...")
+        guide_path = os.path.join(d, "cf_guide.xml")
+        kept, signatures = xmltv.write_combined(blobs, wanted_tvg_ids, guide_path, signature_tvg_ids)
         if signatures:
             updated = db.local_now().isoformat(timespec="seconds")
             db.executemany(
@@ -229,7 +239,10 @@ def build_outputs(log=lambda s: None):
                  for tvg_id, data in signatures.items()]
             )
             log(f"  guide: indexed programme lineups for {len(signatures)} station ids")
-        files.append(f"cf_guide.xml ({kept} channels)")
+        if wanted_tvg_ids:
+            files.append(f"cf_guide.xml ({kept} channels)")
+        elif os.path.exists(guide_path):
+            os.remove(guide_path)
 
     log(f"outputs: {', '.join(files) if files else 'nothing generated'}")
     if skipped:
