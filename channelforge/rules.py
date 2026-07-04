@@ -34,7 +34,7 @@ def dedupe_key(name):
 def is_by_brand_alias(name):
     return dedupe_key(name) != normalize(name)
 
-MATCH_FIELDS = ["name", "tvg_id", "tvg_name", "group", "url", "external_id", "any"]
+MATCH_FIELDS = ["name", "tvg_id", "tvg_name", "group", "url", "external_id", "tvg_description", "tvc_guide_description", "any"]
 MATCH_TYPES = ["equals", "not_equals", "contains", "not_contains", "starts", "not_starts", "ends", "not_ends", "regex", "not_regex"]
 ACTIONS = ["assign", "ignore", "set_field"]
 SET_FIELDS = ["name", "group", "logo", "tvg_id"]
@@ -54,6 +54,10 @@ def field_value(sc, field):
         return sc["url"] or ""
     if field == "external_id":
         return sc["external_id"] or ""
+    if field == "tvg_description":
+        return attrs.get("tvg-description", "")
+    if field == "tvc_guide_description":
+        return attrs.get("tvc-guide-description", "")
     return ""
 
 

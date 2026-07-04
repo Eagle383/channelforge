@@ -11,6 +11,17 @@
     <label>&nbsp;<button>Import</button></label>
   </div>
 </form>
+
+<h2>Import station mappings as rules</h2>
+<p class="dim small">Use this when channels already exist in channelforge and you only want the old Playlist Manager station mappings as assign/ignore rules. Parents is used only to translate legacy <code>plm_</code> target IDs to existing channels.</p>
+<form method="post" action="/migrate/station_mapping_rules" enctype="multipart/form-data">
+  <div class="grid">
+    <label>PlaylistManager_Parents.csv <input type="file" name="parents" accept=".csv" required></label>
+    <label>PlaylistManager_StationMappings.csv <input type="file" name="station_mappings" accept=".csv" required></label>
+    <label>&nbsp;<button>Import rules only</button></label>
+  </div>
+</form>
+
 {% if results %}
 <h2>Results</h2>
 <pre class="log">{% for line in results %}{{ line }}

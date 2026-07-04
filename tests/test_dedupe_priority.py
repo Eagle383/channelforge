@@ -6,7 +6,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from channelforge import app as webapp
-from channelforge import channels_dvr, db, fastchannels, refresh, rules, xmltv
+from channelforge import channels_dvr, db, fastchannels, importer, refresh, rules, xmltv
 
 
 def reset_db(data_dir):
@@ -62,6 +62,43 @@ class DedupePriorityTests(unittest.TestCase):
             "INSERT INTO guide_signatures(tvg_id, signature, sample, n, updated) VALUES(?, ?, ?, ?, ?)",
             (tvg_id, json.dumps(keys), "Show A | Show B", len(keys), "now"),
         )
+
+    def test_station_mapping_rules_import_targets_existing_channels(self):
+        self.add_channel("Funny AF")
+        parents = b"""parent_channel_id,parent_title,parent_tvg_id_override,parent_tvg_logo_override,parent_channel_number_override,parent_tvc_guide_stationid_override,parent_tvc_guide_art_override,parent_tvc_guide_tags_override,parent_tvc_guide_genres_override,parent_tvc_guide_categories_override,parent_tvc_guide_placeholders_override,parent_tvc_stream_vcodec_override,parent_tvc_stream_acodec_override,parent_preferred_playlist,parent_active,parent_tvg_description_override,parent_group_title_override
+plm_0455,Funny AF,,,,,,,,,,,,,On,,
+"""
+        mappings = b"""station_mapping_id,station_mapping_name,station_mapping_active,station_mapping_priority,source_m3u_id,source_field,source_field_compare_id,source_field_string,target_field,target_field_compare_replace_id,target_field_string,target_parent_channel_id,target_stream_format_override
+plmmap_0004,Funny AF,On,9,all,title,equal,Funny AF,no_field,na,,plm_0455,None
+"""
+
+        importer.import_station_mapping_rules(parents, mappings)
+
+        rule = db.q1("SELECT * FROM rules WHERE name = ?", ("Funny AF",))
+        self.assertIsNotNone(rule)
+        self.assertEqual(rule["match_field"], "name")
+        self.assertEqual(rule["match_type"], "equals")
+        self.assertEqual(rule["pattern"], "Funny AF")
+        self.assertEqual(rule["action"], "assign")
+
+    def test_station_mapping_rules_support_description_fields(self):
+        source = self.add_source("fastchannels")
+        self.add_child(
+            source, None, "one.spanish", "Peliculas",
+            attrs={"tvc-guide-description": "Canal en espanol con peliculas gratis"},
+        )
+        parents = b"""parent_channel_id,parent_title,parent_tvg_id_override,parent_tvg_logo_override,parent_channel_number_override,parent_tvc_guide_stationid_override,parent_tvc_guide_art_override,parent_tvc_guide_tags_override,parent_tvc_guide_genres_override,parent_tvc_guide_categories_override,parent_tvc_guide_placeholders_override,parent_tvc_stream_vcodec_override,parent_tvc_stream_acodec_override,parent_preferred_playlist,parent_active,parent_tvg_description_override,parent_group_title_override
+"""
+        mappings = b"""station_mapping_id,station_mapping_name,station_mapping_active,station_mapping_priority,source_m3u_id,source_field,source_field_compare_id,source_field_string,target_field,target_field_compare_replace_id,target_field_string,target_parent_channel_id,target_stream_format_override
+plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)espanol,no_field,na,,Ignore,None
+"""
+
+        importer.import_station_mapping_rules(parents, mappings)
+        _assigned, ignored = rules.apply_all()
+
+        self.assertEqual(ignored, 1)
+        row = db.q1("SELECT ignored FROM source_channels WHERE external_id = ?", ("one.spanish",))
+        self.assertEqual(row["ignored"], 1)
 
     def test_merge_duplicates_keeps_loose_name_matches_for_review(self):
         a = self.add_channel("Duck Dynasty by A&E")

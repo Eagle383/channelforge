@@ -476,6 +476,16 @@ async def migrate_run(request: Request, playlists: UploadFile = None, parents: U
     return render("migrate.html", request, results=lines)
 
 
+@app.post("/migrate/station_mapping_rules")
+async def migrate_station_mapping_rules(request: Request, parents: UploadFile, station_mappings: UploadFile):
+    if parents is None or station_mappings is None or not parents.filename or not station_mappings.filename:
+        return render("migrate.html", request, results=["upload Parents and StationMappings CSV files"])
+    lines = []
+    importer.import_station_mapping_rules(await parents.read(), await station_mappings.read(), log=lines.append)
+    lines.append("run Apply rules now or Refresh to apply imported mappings")
+    return render("migrate.html", request, results=lines)
+
+
 # ---------- outputs ----------
 @app.get("/outputs", response_class=HTMLResponse)
 def outputs_page(request: Request):
