@@ -45,7 +45,7 @@
         <option value="1" {{ 'selected' if s['auto_create_channels'] == '1' }}>On</option>
       </select>
     </label>
-    <label>Merge hard duplicate channels on every refresh (same station id, exact normalized name, or plain name + "by &lt;brand&gt;" alias; softer candidates stay on duplicate review)
+    <label>Merge hard duplicate channels on every refresh (same station id, exact normalized name, plain name + "by &lt;brand&gt;" alias, or strong programme-lineup match; softer candidates stay on duplicate review)
       <select name="auto_merge_duplicates">
         <option value="1" {{ 'selected' if s['auto_merge_duplicates'] != '0' }}>On</option>
         <option value="0" {{ 'selected' if s['auto_merge_duplicates'] == '0' }}>Off</option>

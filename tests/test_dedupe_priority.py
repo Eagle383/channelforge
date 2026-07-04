@@ -196,6 +196,23 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertEqual(len(groups), 1)
         self.assertIn("same guide programme lineup", groups[0]["why"])
 
+    def test_merge_duplicates_merges_matching_programme_lineups(self):
+        source = self.add_source("fastchannels")
+        keeper = self.add_channel("Big 12 Network")
+        loser = self.add_channel("Big 12 Studios")
+        keys = ["football-900", "football-1200"]
+        self.add_signature("network.epg", keys)
+        self.add_signature("studios.epg", keys)
+        self.add_child(source, keeper, "one.big12", "Big 12 Network", attrs={"tvg-id": "network.epg"})
+        self.add_child(source, loser, "two.big12", "Big 12 Studios", attrs={"tvg-id": "studios.epg"})
+
+        merged = rules.merge_duplicates()
+
+        self.assertEqual(merged, 1)
+        self.assertIsNone(db.q1("SELECT 1 FROM channels WHERE id = ?", (loser,)))
+        child = db.q1("SELECT channel_id FROM source_channels WHERE external_id = ?", ("two.big12",))
+        self.assertEqual(child["channel_id"], keeper)
+
     def test_xmltv_write_combined_returns_programme_signatures(self):
         out_path = os.path.join(self.tmp.name, "guide.xml")
         xml = b"""<tv>

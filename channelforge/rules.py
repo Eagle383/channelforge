@@ -207,6 +207,8 @@ def merge_duplicates(log=lambda s: None):
         sid = db.attrs_of(row).get("tvc-guide-stationid")
         if sid:
             union(seen.setdefault(("sid", sid), row["channel_id"]), row["channel_id"])
+    for a, b in _programme_lineup_pairs({c["id"] for c in channels}):
+        union(a, b)
 
     clusters = {}
     for c in channels:
@@ -306,6 +308,46 @@ def _dupe_confidence(reasons):
     return "weak", 2, "weak name hint"
 
 
+def _programme_lineup_pairs(channel_ids):
+    channel_ids = set(channel_ids)
+    signatures = {r["tvg_id"]: _signature_keys(r) for r in db.q("SELECT tvg_id, signature FROM guide_signatures WHERE n >= 2")}
+    schedule_keys = {}
+
+    def add_schedule(cid, tvg_id):
+        if cid not in channel_ids:
+            return
+        keys = signatures.get((tvg_id or "").strip())
+        if keys:
+            schedule_keys.setdefault(cid, set()).update(keys)
+
+    for c in db.q("SELECT id, tvg_id FROM channels"):
+        add_schedule(c["id"], c["tvg_id"])
+    for row in db.q("SELECT channel_id, attrs FROM source_channels WHERE present = 1 AND channel_id IS NOT NULL"):
+        add_schedule(row["channel_id"], db.attrs_of(row).get("tvg-id"))
+
+    programme_posting = {}
+    for cid, keys in schedule_keys.items():
+        for key in keys:
+            programme_posting.setdefault(key, set()).add(cid)
+    programme_pair_hits = {}
+    fanout_cap = 6
+    for ids in programme_posting.values():
+        ids = sorted(i for i in ids if i in channel_ids)
+        if len(ids) < 2 or len(ids) > fanout_cap:
+            continue
+        for i, cid in enumerate(ids):
+            for other in ids[i + 1:]:
+                k = (cid, other)
+                programme_pair_hits[k] = programme_pair_hits.get(k, 0) + 1
+    out = []
+    for (cid, other), hits in programme_pair_hits.items():
+        smaller = min(len(schedule_keys[cid]), len(schedule_keys[other]))
+        min_hits = 2 if smaller <= 3 else 3
+        if smaller >= 2 and hits >= min_hits and hits / smaller >= 0.75:
+            out.append((cid, other))
+    return out
+
+
 def find_possible_duplicates():
     """Groups of active channels whose names look related: one name's words
     contained in another's ('Antiques Roadshow' / 'PBS Antiques Roadshow',
@@ -385,24 +427,15 @@ def find_possible_duplicates():
             return
         guide_groups.setdefault((kind, value), set()).add(cid)
 
-    signatures = {r["tvg_id"]: _signature_keys(r) for r in db.q("SELECT tvg_id, signature FROM guide_signatures WHERE n >= 2")}
-    schedule_keys = {}
-    def add_schedule(cid, tvg_id):
-        keys = signatures.get((tvg_id or "").strip())
-        if keys:
-            schedule_keys.setdefault(cid, set()).update(keys)
-
     for c in channels:
         guide_edge("guide station id", (c["gracenote_id"] or "").strip(), c["id"])
         guide_edge("guide tvg-id", (c["tvg_id"] or "").strip().casefold(), c["id"])
         guide_edge("guide description", _guide_text_key(c["description"]), c["id"])
-        add_schedule(c["id"], c["tvg_id"])
     for row in db.q("SELECT channel_id, attrs FROM source_channels WHERE present = 1 AND channel_id IS NOT NULL"):
         cid = row["channel_id"]
         if cid not in by_id:
             continue
         attrs = db.attrs_of(row)
-        add_schedule(cid, attrs.get("tvg-id"))
         for field in _GUIDE_ID_FIELDS:
             guide_edge("guide station id" if field == "tvc-guide-stationid" else "guide tvg-id",
                        (attrs.get(field) or "").strip().casefold(), cid)
@@ -416,24 +449,8 @@ def find_possible_duplicates():
             for other in ids[i + 1:]:
                 edge(cid, other, f"same {kind}")
 
-    programme_posting = {}
-    for cid, keys in schedule_keys.items():
-        for key in keys:
-            programme_posting.setdefault(key, set()).add(cid)
-    programme_pair_hits = {}
-    for ids in programme_posting.values():
-        if len(ids) < 2 or len(ids) > fanout_cap:
-            continue
-        ids = sorted(ids)
-        for i, cid in enumerate(ids):
-            for other in ids[i + 1:]:
-                k = (cid, other)
-                programme_pair_hits[k] = programme_pair_hits.get(k, 0) + 1
-    for (cid, other), hits in programme_pair_hits.items():
-        smaller = min(len(schedule_keys[cid]), len(schedule_keys[other]))
-        min_hits = 2 if smaller <= 3 else 3
-        if smaller >= 2 and hits >= min_hits and hits / smaller >= 0.75:
-            edge(cid, other, "same guide programme lineup")
+    for cid, other in _programme_lineup_pairs(by_id):
+        edge(cid, other, "same guide programme lineup")
 
     parent = {c["id"]: c["id"] for c in channels}
     def find(x):
