@@ -5,7 +5,7 @@ import time
 
 import httpx
 
-from . import channels_dvr, db, m3u, rules, xmltv
+from . import channels_dvr, db, fastchannels, m3u, rules, xmltv
 
 OUT_DIR_NAME = "outputs"
 
@@ -243,6 +243,9 @@ def build_outputs(log=lambda s: None):
         log(f"  guide: merging {len(blobs)} guides for {len(wanted_tvg_ids)} output station ids and indexing {len(signature_tvg_ids)} schedule ids...")
         guide_path = os.path.join(d, "cf_guide.xml")
         kept, signatures = xmltv.write_combined(blobs, wanted_tvg_ids, guide_path, signature_tvg_ids)
+        for guide_id, data in fastchannels.bridge_signatures(signatures, signature_tvg_ids, log).items():
+            if data["n"] > signatures.get(guide_id, {}).get("n", 0):
+                signatures[guide_id] = data
         dvr_signatures = channels_dvr.guide_signatures(signature_tvg_ids, log)
         for guide_id, data in dvr_signatures.items():
             if data["n"] > signatures.get(guide_id, {}).get("n", 0):

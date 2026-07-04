@@ -6,7 +6,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from channelforge import app as webapp
-from channelforge import channels_dvr, db, refresh, rules, xmltv
+from channelforge import channels_dvr, db, fastchannels, refresh, rules, xmltv
 
 
 def reset_db(data_dir):
@@ -361,6 +361,45 @@ class DedupePriorityTests(unittest.TestCase):
         finally:
             channels_dvr.base_urls = old_base_urls
             channels_dvr._client = old_client
+
+    def test_fastchannels_bridge_links_provider_schedule_to_station_id(self):
+        rows = [
+            {
+                "name": "Big 12 Network",
+                "number": 14966,
+                "source_name": "freelivesports",
+                "gracenote_id": "163942",
+                "slug": "big-12-network",
+                "stream_url": "https://example.test/big12network.m3u8",
+            },
+            {
+                "name": "Big 12 Studios",
+                "number": 13887,
+                "source_name": "roku",
+                "gracenote_id": None,
+                "slug": "|163942",
+                "stream_url": "roku://955058d03806e22dbb37bf1ee8d681a1",
+            },
+        ]
+        provider_sig = {"signature": ["game-1", "game-2"], "sample": "Game 1 | Game 2", "n": 2}
+        old_base_urls = fastchannels.base_urls
+        old_get_channels = fastchannels._get_channels
+        try:
+            fastchannels.base_urls = lambda: ["http://fastchannels.test"]
+            fastchannels._get_channels = lambda _base: rows
+
+            linked = fastchannels.bridge_signatures(
+                {"roku.955058d03806e22dbb37bf1ee8d681a1": provider_sig},
+                {"163942", "Big 12 Network", "14966"},
+                lambda _s: None,
+            )
+
+            self.assertEqual(linked["163942"], provider_sig)
+            self.assertEqual(linked["Big 12 Network"], provider_sig)
+            self.assertEqual(linked["14966"], provider_sig)
+        finally:
+            fastchannels.base_urls = old_base_urls
+            fastchannels._get_channels = old_get_channels
 
     def test_dupes_page_suggests_keeper_by_output_stream_priority(self):
         hi = self.add_source("high", priority=1)
