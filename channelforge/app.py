@@ -193,19 +193,46 @@ def channels_delete(request: Request, channel_id: int = Form(...)):
 @app.get("/dupes", response_class=HTMLResponse)
 def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50):
     groups = rules.find_possible_duplicates()
-    provs, kids = {}, {}
-    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, s.name sname
+    provs, kids, guide = {}, {}, {}
+
+    def add_guide(cid, label, value):
+        value = (value or "").strip()
+        if not value:
+            return
+        guide.setdefault(cid, {}).setdefault(label, set()).add(value)
+
+    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, sc.attrs, s.name sname
                      FROM source_channels sc JOIN sources s ON s.id = sc.source_id
                      WHERE sc.present = 1 AND sc.channel_id IS NOT NULL"""):
         provs.setdefault(k["cid"], set()).add(m3u.provider_of(k["ext"]) or k["sname"])
         kids[k["cid"]] = kids.get(k["cid"], 0) + 1
+        attrs = db.attrs_of(k)
+        add_guide(k["cid"], "station", attrs.get("tvc-guide-stationid"))
+        add_guide(k["cid"], "tvg", attrs.get("tvg-id"))
+        add_guide(k["cid"], "title", attrs.get("tvc-guide-title") or attrs.get("tvg-name"))
+        add_guide(k["cid"], "desc", attrs.get("tvc-guide-description") or attrs.get("tvg-description"))
+
+    def guide_hint(c):
+        data = guide.get(c["id"], {})
+        parts = []
+        for label in ("station", "tvg", "title"):
+            vals = sorted(data.get(label, ()), key=str.casefold)
+            if vals:
+                parts.append(f"{label}: {vals[0]}")
+        descs = sorted(data.get("desc", ()), key=str.casefold)
+        if descs:
+            desc = descs[0]
+            parts.append((desc[:90] + "...") if len(desc) > 90 else desc)
+        return " | ".join(parts)
+
     for g in groups:
         g["channels"] = [dict(c, provs=", ".join(sorted(provs.get(c["id"], ()), key=str.casefold)),
-                              n_children=kids.get(c["id"], 0)) for c in g["channels"]]
+                              n_children=kids.get(c["id"], 0), guide_hint=guide_hint(c)) for c in g["channels"]]
     if q:
         needle = q.casefold()
         groups = [g for g in groups if needle in g["why"].casefold()
-                  or any(needle in c["name"].casefold() for c in g["channels"])]
+                  or any(needle in c["name"].casefold() or needle in c["guide_hint"].casefold()
+                         for c in g["channels"])]
     total = len(groups)
     per_page = min(max(per_page, 10), 200)
     pages = max(1, (total + per_page - 1) // per_page)

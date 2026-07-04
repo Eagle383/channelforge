@@ -97,6 +97,50 @@ class DedupePriorityTests(unittest.TestCase):
             {"ABC KATU Portland OR", "KATU ABC 2 News Portland OR"},
         )
 
+    def test_possible_duplicates_uses_matching_guide_tvg_ids(self):
+        source = self.add_source("fastchannels")
+        a = self.add_channel("Mystery Theater")
+        b = self.add_channel("Classic Mystery")
+        self.add_child(source, a, "one.mystery", "Mystery Theater", attrs={"tvg-id": "mystery.us"})
+        self.add_child(source, b, "two.mystery", "Classic Mystery", attrs={"tvg-id": "mystery.us"})
+
+        groups = rules.find_possible_duplicates()
+
+        self.assertEqual(len(groups), 1)
+        self.assertIn("same guide tvg-id", groups[0]["why"])
+        self.assertEqual(
+            {c["name"] for c in groups[0]["channels"]},
+            {"Mystery Theater", "Classic Mystery"},
+        )
+
+    def test_possible_duplicates_uses_matching_long_guide_descriptions(self):
+        source = self.add_source("fastchannels")
+        a = self.add_channel("Oak Island Select")
+        b = self.add_channel("Treasure Mysteries")
+        desc = "Researchers examine hidden clues and historic maps while searching for buried treasure."
+        self.add_child(source, a, "one.oak", "Oak Island Select", attrs={"tvg-description": desc})
+        self.add_child(source, b, "two.oak", "Treasure Mysteries", attrs={"tvc-guide-description": desc})
+
+        groups = rules.find_possible_duplicates()
+
+        self.assertEqual(len(groups), 1)
+        self.assertIn("same guide description", groups[0]["why"])
+        self.assertEqual(
+            {c["name"] for c in groups[0]["channels"]},
+            {"Oak Island Select", "Treasure Mysteries"},
+        )
+
+    def test_possible_duplicates_ignores_short_guide_descriptions(self):
+        source = self.add_source("fastchannels")
+        a = self.add_channel("Channel One")
+        b = self.add_channel("Station Two")
+        self.add_child(source, a, "one.live", "Channel One", attrs={"tvg-description": "Watch live TV."})
+        self.add_child(source, b, "two.live", "Station Two", attrs={"tvg-description": "Watch live TV."})
+
+        groups = rules.find_possible_duplicates()
+
+        self.assertEqual(groups, [])
+
     def test_merge_duplicates_merges_plain_name_and_provider_alias(self):
         source = self.add_source("fastchannels")
         plain = self.add_channel("Duck Dynasty")

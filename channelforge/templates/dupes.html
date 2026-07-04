@@ -4,7 +4,7 @@
 {%- endmacro %}
 {% block content %}
 <h1>Possible duplicates <span class="dim small">({{ total }} groups)</span></h1>
-<p class="dim small">Channels whose names look related but lack the hard evidence (shared guide station id, exact normalized name, or plain-name/"by brand" pair) that the automatic merge requires — so nothing here merges on its own. Pick the channel to keep and merge the ticked ones into it, or mark the group "not duplicates" to stop it being suggested.</p>
+<p class="dim small">Channels whose names or guide data look related. Automatic merges still require hard evidence (shared guide station id, exact normalized name, or plain-name/"by brand" pair); everything else waits here for a manual verdict.</p>
 
 <form class="bar" method="get" action="/dupes">
   <input name="q" value="{{ q }}" placeholder="search duplicate groups...">
@@ -27,7 +27,7 @@
 </form>
 <form method="post" action="/dupes/merge" style="margin-bottom:22px">
   <table>
-    <tr><th>Keep</th><th>Merge</th><th>Name</th><th>No.</th><th>Station ID</th><th>tvg-id</th><th>Providers</th><th>Streams</th></tr>
+    <tr><th>Keep</th><th>Merge</th><th>Name</th><th>No.</th><th>Station ID</th><th>tvg-id</th><th>Guide clues</th><th>Providers</th><th>Streams</th></tr>
     {% for c in g.channels %}
     <tr>
       <td><input type="radio" name="keeper_id" value="{{ c.id }}" {{ 'checked' if loop.first }}></td>
@@ -36,6 +36,7 @@
       <td>{{ c.number }}</td>
       <td class="small">{{ c.gracenote_id }}</td>
       <td class="small dim">{{ c.tvg_id }}</td>
+      <td class="small dim">{{ c.guide_hint }}</td>
       <td class="small">{{ c.provs }}</td>
       <td>{{ c.n_children }}</td>
     </tr>

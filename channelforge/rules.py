@@ -259,11 +259,20 @@ _STOP_TOKENS = {
     "the", "a", "an", "and", "with", "by", "of", "en",
     "channel", "free", "hd", "live", "network", "news", "now", "plus", "tv",
 }
+_GUIDE_ID_FIELDS = ("tvc-guide-stationid", "tvg-id")
+_GUIDE_DESC_FIELDS = ("tvc-guide-description", "tvg-description")
 
 
 def _name_tokens(name):
     s = unicodedata.normalize("NFKD", (name or "")).casefold()
     return _TOKEN_RE.findall(s.replace("'", "").replace("’", ""))
+
+
+def _guide_text_key(text):
+    words = [w for w in _name_tokens(text) if w not in _STOP_TOKENS]
+    if len(words) < 6:
+        return ""
+    return " ".join(words)
 
 
 def _is_subseq(small, big):
@@ -343,6 +352,34 @@ def find_possible_duplicates():
         for i, cid in enumerate(ids):
             for other in ids[i + 1:]:
                 edge(cid, other, "same name after trailing 'by <brand>' is removed")
+
+    guide_groups = {}
+    def guide_edge(kind, value, cid):
+        if not value:
+            return
+        guide_groups.setdefault((kind, value), set()).add(cid)
+
+    for c in channels:
+        guide_edge("guide station id", (c["gracenote_id"] or "").strip(), c["id"])
+        guide_edge("guide tvg-id", (c["tvg_id"] or "").strip().casefold(), c["id"])
+        guide_edge("guide description", _guide_text_key(c["description"]), c["id"])
+    for row in db.q("SELECT channel_id, attrs FROM source_channels WHERE present = 1 AND channel_id IS NOT NULL"):
+        cid = row["channel_id"]
+        if cid not in by_id:
+            continue
+        attrs = db.attrs_of(row)
+        for field in _GUIDE_ID_FIELDS:
+            guide_edge("guide station id" if field == "tvc-guide-stationid" else "guide tvg-id",
+                       (attrs.get(field) or "").strip().casefold(), cid)
+        for field in _GUIDE_DESC_FIELDS:
+            guide_edge("guide description", _guide_text_key(attrs.get(field)), cid)
+    for (kind, _value), ids in guide_groups.items():
+        ids = sorted(ids)
+        if len(ids) < 2 or len(ids) > fanout_cap:
+            continue
+        for i, cid in enumerate(ids):
+            for other in ids[i + 1:]:
+                edge(cid, other, f"same {kind}")
 
     parent = {c["id"]: c["id"] for c in channels}
     def find(x):
