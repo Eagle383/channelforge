@@ -10,6 +10,17 @@
     <label>Group <input name="grp" value="{{ c.grp }}"></label>
     <label>Genres override (comma-separated; blank = from streams) <input name="genres" value="{{ c.genres_ovr }}" placeholder="{{ c.genres_eff }}"></label>
     <label>Categories override <input name="categories" value="{{ c.cats_ovr }}"></label>
+    <label>Provider override
+      <select name="preferred_provider">
+        <option value="" {{ 'selected' if not c.preferred_provider }}>auto</option>
+        {% if c.preferred_provider and c.preferred_provider not in c.provider_options %}
+          <option value="{{ c.preferred_provider }}" selected>{{ c.preferred_provider }} (missing)</option>
+        {% endif %}
+        {% for p in c.provider_options %}
+          <option value="{{ p }}" {{ 'selected' if c.preferred_provider == p }}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Active <input type="checkbox" name="active" {{ 'checked' if c.active }}></label>
     <label>&nbsp;<span><button>Save</button></span></label>
   </div>

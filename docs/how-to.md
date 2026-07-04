@@ -62,7 +62,7 @@ Leave the rest at defaults for now. Save.
 
 **Priority is the whole ballgame when the same channel exists in several sources: lower number wins.** Put your OTA tuner at `1` so real broadcast streams always beat FAST copies. If you run two variants of a feed (say one with Gracenote IDs and one without), give the one you *want* to win the lower number.
 
-If one source combines many providers (`samsung.*`, `pluto.*`, `stirr.*` channel-ids), drag the **Provider priority** list on the Sources page into your preferred order — it breaks ties *within* that source.
+If one source combines many providers (`samsung.*`, `pluto.*`, `stirr.*` channel-ids), drag the **Provider priority** list on the Sources page into your preferred order — it breaks ties *within* that source. For a single channel that should use a different provider, open its row on the Channels page and set **Provider override**.
 
 ## 4. First refresh
 
@@ -157,7 +157,7 @@ Channels, rules, and assignments each round-trip through CSV: **Export CSV** →
 | Channel numbers blank | Numbers are assigned during a refresh — run one |
 | Genres column blank | Run a refresh after adding sources; if still blank, the feed has no `group-title` either — set overrides |
 | A channel has 0 streams | All its source entries disappeared from the feeds (Channels page → edit shows each stream's health: `ok` / `down` / `gone`) |
-| Wrong stream is playing | Check the `▶ provider` badge, then fix source Priority (Sources page) or set the channel's preferred source |
+| Wrong stream is playing | Check the `▶ provider` badge, then fix source Priority (Sources page) or set the channel's Provider override |
 | DVR shows stale channels | Outputs → *Add all to Channels DVR* re-registers and prunes; or enable auto-push |
 | Refresh waits forever on the hook | Lower the *max minutes* ceiling — sources that never scrape are detected and skipped after ~1 min of scraper idleness |
 | Job died with "interrupted by restart" | The container restarted mid-job (e.g. an image pull); just run it again |

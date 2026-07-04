@@ -116,13 +116,13 @@ def channels_page(request: Request, q: str = "", show: str = "all", prov: str = 
 
     def enrich(r):
         ovr = json.loads(r["attrs"] or "{}")
-        best, _ = refresh.pick_stream(pick_pool.get(r["id"], []), r["preferred_source_id"])
+        best, _ = refresh.pick_stream(pick_pool.get(r["id"], []), r["preferred_source_id"], r["preferred_provider"])
         geff = refresh.effective_genres(r, best)   # what the outputs will emit
         gset = {t.strip() for t in geff.split(",") if t.strip()}
         return dict(r, provs=", ".join(sorted(provs.get(r["id"], ()), key=str.casefold)),
                     genres_eff=geff, genres_set=gset,
                     genres_ovr=ovr.get("tvc-guide-genres", ""),
-                    pick=(m3u.provider_of(best["external_id"]) or best["src_name"]) if best else "")
+                    pick=refresh.provider_label(best) if best else "")
 
     rows = [enrich(r) for r in rows]
     all_genres = sorted({g for r in rows for g in r["genres_set"]}, key=str.casefold)
@@ -149,19 +149,22 @@ def channel_edit(channel_id: int):
         return HTMLResponse("channel not found", status_code=404)
     ovr = json.loads(r["attrs"] or "{}")
     pool = refresh.assigned_children().get(channel_id, [])
-    best, _ = refresh.pick_stream(pool, r["preferred_source_id"])
-    kids = [{"prov": m3u.provider_of(k["external_id"]) or k["src_name"], "src": k["src_name"],
+    best, _ = refresh.pick_stream(pool, r["preferred_source_id"], r["preferred_provider"])
+    provider_options = sorted({refresh.provider_label(k) for k in pool}, key=str.casefold)
+    kids = [{"prov": refresh.provider_label(k), "src": k["src_name"],
              "ext": k["external_id"], "healthy": k["healthy"], "present": k["present"],
              "win": best is not None and k["id"] == best["id"]} for k in pool]
     c = dict(r, genres_eff=refresh.effective_genres(r, best),
-             genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""), kids=kids)
+             genres_ovr=ovr.get("tvc-guide-genres", ""), cats_ovr=ovr.get("tvc-guide-categories", ""),
+             provider_options=provider_options, kids=kids)
     return HTMLResponse(env.get_template("channel_edit.html").render(c=c))
 
 
 @app.post("/channels/save")
 def channels_save(request: Request, channel_id: str = Form(""), name: str = Form(...), number: str = Form(""),
                   gracenote_id: str = Form(""), tvg_id: str = Form(""), logo: str = Form(""),
-                  grp: str = Form(""), active: str = Form(""), genres: str = Form(""), categories: str = Form("")):
+                  grp: str = Form(""), active: str = Form(""), genres: str = Form(""), categories: str = Form(""),
+                  preferred_provider: str = Form("")):
     row = db.q1("SELECT attrs FROM channels WHERE id = ?", (int(channel_id),)) if channel_id.isdigit() else None
     attrs = json.loads(row["attrs"] or "{}") if row else {}
     for key, v in (("tvc-guide-genres", genres.strip()), ("tvc-guide-categories", categories.strip())):
@@ -169,11 +172,11 @@ def channels_save(request: Request, channel_id: str = Form(""), name: str = Form
             attrs[key] = v
         else:
             attrs.pop(key, None)
-    vals = (name, number, gracenote_id, tvg_id, logo, grp, 1 if active else 0, json.dumps(attrs))
+    vals = (name, number, gracenote_id, tvg_id, logo, grp, 1 if active else 0, preferred_provider.strip(), json.dumps(attrs))
     if channel_id.isdigit():
-        db.execute("UPDATE channels SET name=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, active=?, attrs=? WHERE id=?", vals + (int(channel_id),))
+        db.execute("UPDATE channels SET name=?, number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, active=?, preferred_provider=?, attrs=? WHERE id=?", vals + (int(channel_id),))
     else:
-        db.execute("INSERT INTO channels(name, number, gracenote_id, tvg_id, logo, grp, active, attrs) VALUES(?,?,?,?,?,?,?,?)", vals)
+        db.execute("INSERT INTO channels(name, number, gracenote_id, tvg_id, logo, grp, active, preferred_provider, attrs) VALUES(?,?,?,?,?,?,?,?,?)", vals)
     return back(request, "saved")
 
 
@@ -269,7 +272,7 @@ def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int
         return " | ".join(parts)
 
     def best_stream_info(c):
-        best, _fmt = refresh.pick_stream(pick_pool.get(c["id"], []), c["preferred_source_id"])
+        best, _fmt = refresh.pick_stream(pick_pool.get(c["id"], []), c["preferred_source_id"], c["preferred_provider"])
         if not best:
             return "", "", "", 999999, unranked_provider, 999999999
         provider = m3u.provider_of(best["external_id"])

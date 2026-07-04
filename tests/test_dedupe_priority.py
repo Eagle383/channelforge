@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from channelforge import app as webapp
 from channelforge import channels_dvr, db, fastchannels, importer, jobs, refresh, rules, xmltv
+from channelforge import csv_io
 
 
 def reset_db(data_dir):
@@ -735,6 +736,62 @@ plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)
         best, _ = refresh.pick_stream(refresh.assigned_children()[ch], None)
 
         self.assertEqual(best["url"], "http://pluto.example/stream.m3u8")
+
+    def test_pick_stream_honors_channel_provider_override(self):
+        source = self.add_source("fastchannels", priority=10)
+        ch = self.add_channel("BBC Earth")
+        self.add_child(source, ch, "xumo.bbc-earth", "BBC Earth", url="http://xumo.example/stream.m3u8")
+        self.add_child(source, ch, "pluto.bbc-earth", "BBC Earth", url="http://pluto.example/stream.m3u8")
+        db.set_setting("provider_order", json.dumps(["pluto", "xumo"]))
+
+        best, _ = refresh.pick_stream(refresh.assigned_children()[ch], preferred_provider="xumo")
+
+        self.assertEqual(best["url"], "http://xumo.example/stream.m3u8")
+
+    def test_pick_stream_provider_override_still_fails_over_to_healthy_stream(self):
+        source = self.add_source("fastchannels", priority=10)
+        ch = self.add_channel("BBC Earth")
+        self.add_child(source, ch, "xumo.bbc-earth", "BBC Earth", url="http://xumo.example/stream.m3u8")
+        self.add_child(source, ch, "pluto.bbc-earth", "BBC Earth", url="http://pluto.example/stream.m3u8")
+        db.execute("UPDATE source_channels SET healthy = 0 WHERE external_id = ?", ("xumo.bbc-earth",))
+
+        best, _ = refresh.pick_stream(refresh.assigned_children()[ch], preferred_provider="xumo")
+
+        self.assertEqual(best["url"], "http://pluto.example/stream.m3u8")
+
+    def test_channel_form_saves_provider_override(self):
+        source = self.add_source("fastchannels")
+        ch = self.add_channel("BBC Earth")
+        self.add_child(source, ch, "xumo.bbc-earth", "BBC Earth", url="http://xumo.example/stream.m3u8")
+        self.add_child(source, ch, "pluto.bbc-earth", "BBC Earth", url="http://pluto.example/stream.m3u8")
+
+        with TestClient(webapp.app) as client:
+            response = client.post(
+                "/channels/save",
+                data={"channel_id": str(ch), "name": "BBC Earth", "active": "on", "preferred_provider": "xumo"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 303)
+        row = db.q1("SELECT preferred_provider FROM channels WHERE id = ?", (ch,))
+        self.assertEqual(row["preferred_provider"], "xumo")
+        best, _ = refresh.pick_stream(refresh.assigned_children()[ch], preferred_provider=row["preferred_provider"])
+        self.assertEqual(best["url"], "http://xumo.example/stream.m3u8")
+
+    def test_channel_csv_round_trips_provider_override(self):
+        ch = self.add_channel("BBC Earth")
+        db.execute("UPDATE channels SET preferred_provider = ? WHERE id = ?", ("pluto", ch))
+
+        exported = csv_io.export_channels()
+
+        self.assertIn("preferred_provider", exported.splitlines()[0])
+        self.assertIn("pluto", exported)
+
+        old_csv = f"id,name,active,number,gracenote_id,tvg_id,logo,grp,description\n{ch},BBC Earth,1,,,,,,\n"
+        csv_io.import_channels(old_csv.encode())
+
+        row = db.q1("SELECT preferred_provider FROM channels WHERE id = ?", (ch,))
+        self.assertEqual(row["preferred_provider"], "pluto")
 
 
 if __name__ == "__main__":
