@@ -205,6 +205,8 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertIn(checked, html)
         self.assertLess(html.index(checked), html.index(unchecked))
         self.assertIn("high / xumo", html)
+        self.assertIn("source priority 1", html)
+        self.assertIn("provider rank unranked", html)
 
     def test_merge_duplicates_merges_plain_name_and_provider_alias(self):
         source = self.add_source("fastchannels")

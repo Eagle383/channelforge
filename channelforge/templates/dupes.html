@@ -37,7 +37,10 @@
       <td class="small">{{ c.gracenote_id }}</td>
       <td class="small dim">{{ c.tvg_id }}</td>
       <td class="small dim">{{ c.guide_hint }}</td>
-      <td class="small" title="{{ c.best_stream_url }}">{{ c.best_stream }}</td>
+      <td class="small" title="{{ c.best_stream_url }}">
+        {{ c.best_stream }}
+        {% if c.best_detail %}<div class="dim">{{ c.best_detail }}</div>{% endif %}
+      </td>
       <td class="small">{{ c.provs }}</td>
       <td>{{ c.n_children }}</td>
     </tr>

@@ -238,21 +238,25 @@ def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50)
     def best_stream_info(c):
         best, _fmt = refresh.pick_stream(pick_pool.get(c["id"], []), c["preferred_source_id"])
         if not best:
-            return "", "", 999999, unranked_provider, 999999999
+            return "", "", "", 999999, unranked_provider, 999999999
         provider = m3u.provider_of(best["external_id"])
         label = provider or best["src_name"]
         if best["src_name"] and provider:
             label = f"{best['src_name']} / {provider}"
         priority = best["src_priority"]
-        return label, best["url"], priority, provider_rank.get(provider, unranked_provider), best["id"]
+        rank = provider_rank.get(provider, unranked_provider)
+        detail = f"source priority {priority}"
+        if provider:
+            detail += f", provider rank {rank + 1 if rank < unranked_provider else 'unranked'}"
+        return label, best["url"], detail, priority, rank, best["id"]
 
     for g in groups:
         rows = []
         for c in g["channels"]:
-            best_label, best_url, best_priority, best_provider_rank, best_id = best_stream_info(c)
+            best_label, best_url, best_detail, best_priority, best_provider_rank, best_id = best_stream_info(c)
             rows.append(dict(c, provs=", ".join(sorted(provs.get(c["id"], ()), key=str.casefold)),
                              n_children=kids.get(c["id"], 0), guide_hint=guide_hint(c),
-                             best_stream=best_label, best_stream_url=best_url,
+                             best_stream=best_label, best_stream_url=best_url, best_detail=best_detail,
                              best_priority=best_priority, best_provider_rank=best_provider_rank,
                              best_stream_id=best_id))
         g["channels"] = sorted(rows, key=lambda c: (
