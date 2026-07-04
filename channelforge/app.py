@@ -191,7 +191,7 @@ def channels_delete(request: Request, channel_id: int = Form(...)):
 
 # ---------- possible-duplicates review ----------
 @app.get("/dupes", response_class=HTMLResponse)
-def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50):
+def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int = 1, per_page: int = 50):
     groups = rules.find_possible_duplicates()
     provs, kids, guide = {}, {}, {}
     pick_pool = refresh.assigned_children()
@@ -262,6 +262,7 @@ def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50)
         g["channels"] = sorted(rows, key=lambda c: (
             c["best_priority"], c["best_provider_rank"], c["best_stream_id"], c["name"].casefold()))
     groups.sort(key=lambda g: (
+        g.get("confidence_rank", 9),
         g["channels"][0]["best_priority"] if g["channels"] else 999999,
         g["channels"][0]["name"].casefold() if g["channels"] else ""))
     if q:
@@ -269,13 +270,22 @@ def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50)
         groups = [g for g in groups if needle in g["why"].casefold()
                   or any(needle in c["name"].casefold() or needle in c["guide_hint"].casefold()
                          for c in g["channels"])]
+    counts = {"all": len(groups), "strong": 0, "medium": 0, "weak": 0}
+    for g in groups:
+        if g.get("confidence") in counts:
+            counts[g["confidence"]] += 1
+    if confidence not in counts:
+        confidence = "all"
+    if confidence != "all":
+        groups = [g for g in groups if g.get("confidence") == confidence]
     total = len(groups)
     per_page = min(max(per_page, 10), 200)
     pages = max(1, (total + per_page - 1) // per_page)
     page = min(max(page, 1), pages)
     start = (page - 1) * per_page
     return render("dupes.html", request, groups=groups[start:start + per_page],
-                  total=total, q=q, page_no=page, pages=pages, per_page=per_page)
+                  total=total, counts=counts, q=q, confidence=confidence,
+                  page_no=page, pages=pages, per_page=per_page)
 
 
 @app.post("/dupes/merge")
@@ -294,6 +304,16 @@ def dupes_dismiss(request: Request, group_ids: str = Form(...)):
     pairs = [(a, b) for i, a in enumerate(ids) for b in ids[i + 1:]]
     db.executemany("INSERT OR IGNORE INTO dupe_dismissed(a, b) VALUES(?, ?)", pairs)
     return back(request, "dismissed — this group won't be suggested again")
+
+
+@app.post("/dupes/dismiss_many")
+def dupes_dismiss_many(request: Request, group_sets: str = Form(...)):
+    pairs = []
+    for group in group_sets.split(";"):
+        ids = sorted({int(x) for x in group.split(",") if x.strip().isdigit()})
+        pairs.extend((a, b) for i, a in enumerate(ids) for b in ids[i + 1:])
+    db.executemany("INSERT OR IGNORE INTO dupe_dismissed(a, b) VALUES(?, ?)", pairs)
+    return back(request, f"dismissed {len(pairs)} weak duplicate hints")
 
 
 # ---------- assignments (children) ----------

@@ -231,6 +231,42 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertIn("fastchannels / pluto", html)
         self.assertIn("source priority 10, provider rank 1", html)
 
+    def test_dupes_page_filters_by_confidence(self):
+        source = self.add_source("fastchannels")
+        strong_a = self.add_channel("Alpha One")
+        strong_b = self.add_channel("Zulu Two")
+        self.add_channel("CNA")
+        self.add_channel("CBS News Atlanta")
+        keys = [f"program-{i}" for i in range(10)]
+        self.add_signature("alpha.epg", keys)
+        self.add_signature("zulu.epg", keys)
+        self.add_child(source, strong_a, "one.alpha", "Alpha One", attrs={"tvg-id": "alpha.epg"})
+        self.add_child(source, strong_b, "two.zulu", "Zulu Two", attrs={"tvg-id": "zulu.epg"})
+
+        with TestClient(webapp.app) as client:
+            response = client.get("/dupes?confidence=strong")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("strong guide/lineup (1)", html)
+        self.assertIn("Alpha One", html)
+        self.assertIn("Zulu Two", html)
+        self.assertNotIn("CBS News Atlanta", html)
+
+    def test_dupes_page_can_bulk_dismiss_visible_weak_groups(self):
+        self.add_channel("CNA")
+        self.add_channel("CBS News Atlanta")
+
+        with TestClient(webapp.app) as client:
+            response = client.get("/dupes?confidence=weak")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Dismiss visible weak groups", response.text)
+            self.assertIn('name="group_sets"', response.text)
+            client.post("/dupes/dismiss_many", data={"group_sets": "1,2"},
+                        headers={"referer": "/dupes?confidence=weak"})
+
+        self.assertIsNotNone(db.q1("SELECT 1 FROM dupe_dismissed WHERE a = 1 AND b = 2"))
+
     def test_merge_duplicates_merges_plain_name_and_provider_alias(self):
         source = self.add_source("fastchannels")
         plain = self.add_channel("Duck Dynasty")

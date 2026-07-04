@@ -288,6 +288,17 @@ def _is_subseq(small, big):
     return all(ch in it for ch in small)
 
 
+def _dupe_confidence(reasons):
+    text = "; ".join(reasons)
+    if ("same guide programme lineup" in text or "same guide tvg-id" in text
+            or "same guide description" in text or "same guide station id" in text
+            or "same name after trailing" in text):
+        return "strong", 0, "strong guide or alias evidence"
+    if "one name's words contained in the other's" in text:
+        return "medium", 1, "name overlap"
+    return "weak", 2, "weak name hint"
+
+
 def find_possible_duplicates():
     """Groups of active channels whose names look related: one name's words
     contained in another's ('Antiques Roadshow' / 'PBS Antiques Roadshow',
@@ -432,8 +443,11 @@ def find_possible_duplicates():
     for ids in groups.values():
         members = sorted((by_id[i] for i in ids), key=lambda c: (len(toks.get(c["id"], ())), c["name"].casefold()))
         why = sorted({w for k, w in pairs.items() if k[0] in ids or k[1] in ids})
-        out.append({"channels": members, "why": "; ".join(why)})
-    out.sort(key=lambda g: g["channels"][0]["name"].casefold())
+        confidence, rank, hint = _dupe_confidence(why)
+        out.append({"channels": members, "why": "; ".join(why),
+                    "confidence": confidence, "confidence_rank": rank,
+                    "confidence_hint": hint})
+    out.sort(key=lambda g: (g["confidence_rank"], g["channels"][0]["name"].casefold()))
     return out
 
 
