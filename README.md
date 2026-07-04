@@ -77,6 +77,7 @@ Ten minutes, start to finish:
 | Health: fail threshold | Consecutive failed checks before a stream is marked unhealthy |
 | Health: concurrency | Parallel stream checks |
 | Time zone | IANA zone (e.g. `America/Chicago`) for the schedule and log timestamps; blank = server default |
+| Output/guide rebuild interval | Minutes between rebuilding output M3Us and `cf_guide.xml` from current state. Default `60` so Channels DVR's hourly XMLTV pull sees a fresh guide; blank/0 = off |
 | Daily schedule | HH:MM per job, blank = off. Defaults to a night run that ends by 04:00: health 01:00 → refresh 01:30 → DVR m3u re-pull 03:00 → reset passes 04:00 |
 
 ## Jobs
@@ -84,6 +85,7 @@ Ten minutes, start to finish:
 | Job | What it does |
 |---|---|
 | refresh | (POST pre-refresh hook + wait, if set) → fetch all sources → apply rules → regenerate outputs (→ push to DVR if enabled) |
+| outputs | Rebuild output M3Us and `cf_guide.xml` without re-fetching source playlists or forcing an upstream rescrape |
 | apply_rules | Just the rule pass — quick iteration while building rules |
 | health | Probe every stream, mark unhealthy ones for failover |
 | reset_passes | Pause/resume every DVR pass and force all guide lineups to re-download |

@@ -130,6 +130,7 @@ In **Settings**:
   - `01:30` refresh
   - `03:00` DVR m3u re-pull
   - `04:00` reset DVR passes
+- **Output/guide rebuild interval**: leave at `60` so `cf_guide.xml` is rebuilt hourly from current state before Channels DVR's hourly XMLTV refresh.
 - **Pre-refresh hook**: paste your FastChannels address (just `192.168.1.10:5523` is enough — the force-refresh endpoint is filled in). Before each refresh, channelforge triggers a full FastChannels rescrape, watches its progress, and continues the moment every source has finished (the *max minutes* field is only a ceiling).
 - **Push outputs to DVR after each refresh**: `On`. New/changed channels flow to the DVR without you touching anything.
 

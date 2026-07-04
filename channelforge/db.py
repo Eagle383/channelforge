@@ -112,6 +112,7 @@ DEFAULT_SETTINGS = {
     "health_concurrency": "20",
     "schedule.refresh": "01:30",               # HH:MM daily, blank = off; default night run ends by 04:00
     "schedule.health": "01:00",                # health first so the refresh fails over dead streams immediately
+    "schedule.outputs_interval_min": "60",     # rebuild output m3us/cf_guide.xml this often; blank/0 = off
     "schedule.reset_passes": "04:00",
     "schedule.refresh_dvr_m3u": "03:00",
     "base_url": "",                            # external URL of this app for m3u links; blank = derive from request

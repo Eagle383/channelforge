@@ -11,6 +11,7 @@ _lock = threading.Lock()
 JOB_TYPES = {
     "refresh": refresh.run_refresh,
     "quick_refresh": refresh.run_quick_refresh,
+    "outputs": refresh.run_outputs,
     "apply_rules": rules.apply_all,
     "dedupe": refresh.run_dedupe,
     "health": health.run_health_checks,
@@ -55,9 +56,27 @@ def running_job():
     return db.q1("SELECT * FROM jobs WHERE status = 'running' ORDER BY id DESC LIMIT 1")
 
 
+def _interval_minutes(key):
+    try:
+        raw = (db.get_setting(key) or "").strip()
+    except Exception:
+        return 0
+    if not raw.isdigit():
+        return 0
+    return max(0, int(raw))
+
+
+def _interval_due(key, now, fired):
+    minutes = _interval_minutes(key)
+    if minutes <= 0:
+        return False
+    last = fired.get(key)
+    return last is None or (now - last).total_seconds() >= minutes * 60
+
+
 def scheduler_loop():
-    """Fire jobs at their configured HH:MM once per day."""
-    fired = {}  # key -> date fired
+    """Fire daily jobs at HH:MM and interval jobs when due."""
+    fired = {"schedule.outputs_interval_min": db.local_now()}  # key -> date/datetime fired
     while True:
         now = db.local_now()
         hhmm = now.strftime("%H:%M")
@@ -71,6 +90,10 @@ def scheduler_loop():
             if configured and configured == hhmm and fired.get(key) != today:
                 fired[key] = today
                 start_job(job_type)
+        key = "schedule.outputs_interval_min"
+        if _interval_due(key, now, fired):
+            fired[key] = now
+            start_job("outputs")
         time.sleep(20)
 
 

@@ -353,6 +353,12 @@ def run_quick_refresh(log=lambda s: None):
     run_refresh(log, skip_hook=True)
 
 
+def run_outputs(log=lambda s: None):
+    """Rebuild output M3Us and cf_guide.xml from current source/channel state."""
+    build_outputs(log)
+    log("outputs refresh complete")
+
+
 def run_dedupe(log=lambda s: None):
     """Refresh guide signatures, merge hard duplicates, then rebuild outputs."""
     build_outputs(log)

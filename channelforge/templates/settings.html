@@ -68,6 +68,8 @@
   <div class="grid">
     <label>Time zone (IANA name; blank = server default) — schedule clock now reads <span class="badge">{{ tznow }}</span>
       <input name="timezone" value="{{ s['timezone'] }}" placeholder="America/Chicago"></label>
+    <label>Rebuild outputs and cf_guide.xml every N minutes (blank/0 = off)
+      <input name="schedule.outputs_interval_min" type="number" min="0" value="{{ s['schedule.outputs_interval_min'] }}" placeholder="60"></label>
     <label>Stream health checks (before refresh, so it fails over dead streams) <input name="schedule.health" value="{{ s['schedule.health'] }}" placeholder="01:00"></label>
     <label>Refresh sources &amp; outputs <input name="schedule.refresh" value="{{ s['schedule.refresh'] }}" placeholder="01:30"></label>
     <label>Refresh DVR m3u sources <input name="schedule.refresh_dvr_m3u" value="{{ s['schedule.refresh_dvr_m3u'] }}" placeholder="03:00"></label>

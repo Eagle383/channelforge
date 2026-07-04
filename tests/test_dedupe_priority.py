@@ -2,11 +2,12 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
 from channelforge import app as webapp
-from channelforge import channels_dvr, db, fastchannels, importer, refresh, rules, xmltv
+from channelforge import channels_dvr, db, fastchannels, importer, jobs, refresh, rules, xmltv
 
 
 def reset_db(data_dir):
@@ -600,6 +601,28 @@ plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)
         finally:
             refresh.build_outputs = old_build_outputs
             rules.merge_duplicates = old_merge_duplicates
+
+    def test_outputs_job_rebuilds_outputs(self):
+        calls = []
+        old_build_outputs = refresh.build_outputs
+        try:
+            refresh.build_outputs = lambda log=lambda s: None: calls.append("build")
+
+            refresh.run_outputs(lambda _s: None)
+
+            self.assertEqual(calls, ["build"])
+        finally:
+            refresh.build_outputs = old_build_outputs
+
+    def test_output_rebuild_interval_defaults_to_hourly(self):
+        key = "schedule.outputs_interval_min"
+        now = datetime(2026, 7, 4, 12, 0)
+
+        self.assertTrue(jobs._interval_due(key, now, {}))
+        self.assertFalse(jobs._interval_due(key, now, {key: now - timedelta(minutes=59)}))
+        self.assertTrue(jobs._interval_due(key, now, {key: now - timedelta(minutes=60)}))
+        db.set_setting(key, "0")
+        self.assertFalse(jobs._interval_due(key, now, {}))
 
     def test_dupes_page_can_bulk_dismiss_visible_weak_groups(self):
         self.add_channel("CNA")
