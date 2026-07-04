@@ -7,6 +7,7 @@ import httpx
 from . import db
 
 _FC_SUFFIX = "/api/sources/force-refresh"
+_GUIDE_PATHS = ("/feeds/default/epg.xml", "/epg.xml")
 _STATION_SLUG_RE = re.compile(r"^\|(\d+)$")
 _SAMSUNG_RE = re.compile(r"/stvp-([A-Za-z0-9_-]+)")
 _AMAGI_RE = re.compile(r"/playlist/([^/?]+)")
@@ -37,6 +38,57 @@ def base_urls():
             if base and base not in bases:
                 bases.append(base)
     return bases
+
+
+def _configured_guide_on_base(base, skip_urls):
+    for url in skip_urls:
+        if _base_from_url(url) != base:
+            continue
+        path = urlsplit(url if url.startswith(("http://", "https://")) else "http://" + url).path.rstrip("/")
+        if path.endswith("/epg.xml"):
+            return True
+    return False
+
+
+def _fetch_guide_blob(base, skip_urls):
+    skip = {u.strip().rstrip("/") for u in skip_urls if str(u or "").strip()}
+    last_error = None
+    with httpx.Client(timeout=300, follow_redirects=True) as client:
+        for path in _GUIDE_PATHS:
+            url = f"{base}{path}"
+            if url.rstrip("/") in skip:
+                continue
+            try:
+                r = client.get(url)
+                r.raise_for_status()
+                return url, r.content
+            except Exception as e:
+                last_error = e
+    if last_error:
+        raise last_error
+    raise RuntimeError("no unconfigured FastChannels guide URL to fetch")
+
+
+def guide_blobs(skip_urls=None, log=lambda s: None):
+    """Fetch FastChannels' built-in XMLTV guide for signature indexing.
+
+    This avoids depending on Channels DVR as the guide source. DVR only sees
+    channels after ChannelForge has already chosen/merged them, while
+    FastChannels has the provider schedules before dedupe decisions are made.
+    """
+    skip_urls = {str(u or "").strip() for u in (skip_urls or set()) if str(u or "").strip()}
+    out = []
+    for base in base_urls():
+        host = urlsplit(base).netloc or base
+        if _configured_guide_on_base(base, skip_urls):
+            continue
+        try:
+            url, blob = _fetch_guide_blob(base, skip_urls)
+            out.append(blob)
+            log(f"  guide: fetched FastChannels guide from {host} ({urlsplit(url).path})")
+        except Exception as e:
+            log(f"  guide: FastChannels guide from {host} FAILED ({e})")
+    return out
 
 
 def _get_channels(base):

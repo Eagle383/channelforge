@@ -485,6 +485,53 @@ plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)
             fastchannels.base_urls = old_base_urls
             fastchannels._get_channels = old_get_channels
 
+    def test_fastchannels_guide_blobs_skip_already_configured_epg(self):
+        old_base_urls = fastchannels.base_urls
+        old_fetch_guide_blob = fastchannels._fetch_guide_blob
+        try:
+            fastchannels.base_urls = lambda: ["http://fastchannels.test"]
+            fastchannels._fetch_guide_blob = lambda *_args: (
+                "http://fastchannels.test/feeds/default/epg.xml", b"<tv />")
+
+            blobs = fastchannels.guide_blobs(
+                {"http://fastchannels.test/feeds/default/epg.xml"},
+                lambda _s: None,
+            )
+
+            self.assertEqual(blobs, [])
+        finally:
+            fastchannels.base_urls = old_base_urls
+            fastchannels._fetch_guide_blob = old_fetch_guide_blob
+
+    def test_build_outputs_indexes_fastchannels_builtin_guide_without_source_epg(self):
+        source = self.add_source("fastchannels")
+        channel = self.add_channel("Alpha")
+        self.add_child(source, channel, "alpha.source", "Alpha", attrs={"tvg-id": "alpha.epg"})
+        xml = b"""<tv>
+          <channel id="alpha.epg"><display-name>Alpha</display-name></channel>
+          <programme start="20260704010000 +0000" channel="alpha.epg"><title>Show A</title></programme>
+          <programme start="20260704020000 +0000" channel="alpha.epg"><title>Show B</title></programme>
+        </tv>"""
+
+        old_guide_blobs = fastchannels.guide_blobs
+        old_bridge = fastchannels.bridge_signatures
+        old_dvr = channels_dvr.guide_signatures
+        try:
+            fastchannels.guide_blobs = lambda _seen, _log: [xml]
+            fastchannels.bridge_signatures = lambda *_args: {}
+            channels_dvr.guide_signatures = lambda *_args: {}
+
+            refresh.build_outputs(lambda _s: None)
+
+            row = db.q1("SELECT n, sample FROM guide_signatures WHERE tvg_id = ?", ("alpha.epg",))
+            self.assertIsNotNone(row)
+            self.assertEqual(row["n"], 2)
+            self.assertIn("Show A", row["sample"])
+        finally:
+            fastchannels.guide_blobs = old_guide_blobs
+            fastchannels.bridge_signatures = old_bridge
+            channels_dvr.guide_signatures = old_dvr
+
     def test_dupes_page_suggests_keeper_by_output_stream_priority(self):
         hi = self.add_source("high", priority=1)
         lo = self.add_source("low", priority=100)

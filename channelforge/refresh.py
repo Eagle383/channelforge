@@ -234,12 +234,18 @@ def build_outputs(log=lambda s: None):
     db.execute("DELETE FROM guide_signatures")
     if wanted_tvg_ids or signature_tvg_ids:
         blobs = []
+        fetched_epg_urls = set()
         for s in db.q("SELECT * FROM sources WHERE active = 1 AND epg_url != ''"):
+            epg_url = (s["epg_url"] or "").strip()
+            if not epg_url:
+                continue
+            fetched_epg_urls.add(epg_url)
             try:
-                blobs.append(fetch_bytes(s["epg_url"]))
+                blobs.append(fetch_bytes(epg_url))
                 log(f"  guide: fetched {s['name']}")
             except Exception as e:
                 log(f"  guide: {s['name']} FAILED ({e})")
+        blobs.extend(fastchannels.guide_blobs(fetched_epg_urls, log))
         log(f"  guide: merging {len(blobs)} guides for {len(wanted_tvg_ids)} output station ids and indexing {len(signature_tvg_ids)} schedule ids...")
         guide_path = os.path.join(d, "cf_guide.xml")
         kept, signatures = xmltv.write_combined(blobs, wanted_tvg_ids, guide_path, signature_tvg_ids)
