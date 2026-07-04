@@ -100,6 +100,42 @@ plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)
         row = db.q1("SELECT ignored FROM source_channels WHERE external_id = ?", ("one.spanish",))
         self.assertEqual(row["ignored"], 1)
 
+    def test_channels_reset_requires_confirmation(self):
+        self.add_channel("Funny AF")
+
+        with TestClient(webapp.app) as client:
+            response = client.post("/channels/reset", data={"confirm": "delete"}, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM channels")["n"], 1)
+
+    def test_channels_reset_clears_rebuildable_channel_state(self):
+        source = self.add_source("fastchannels")
+        channel = self.add_channel("Funny AF")
+        self.add_child(source, channel, "pluto.funny-af", "Funny AF")
+        db.execute("UPDATE source_channels SET ignored = 1, stream_format_override = 'MPEG-TS'")
+        db.execute(
+            "INSERT INTO rules(name, match_field, match_type, pattern, action, target_channel_id) VALUES('Funny AF','name','equals','Funny AF','assign',?)",
+            (channel,),
+        )
+        db.execute("INSERT INTO dupe_dismissed(a, b) VALUES(1, 2)")
+        self.add_signature("pluto.funny-af", ["show-1", "show-2"])
+
+        with TestClient(webapp.app) as client:
+            response = client.post("/channels/reset", data={"confirm": "DELETE"}, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM sources")["n"], 1)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM source_channels")["n"], 1)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM channels")["n"], 0)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM rules")["n"], 0)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM dupe_dismissed")["n"], 0)
+        self.assertEqual(db.q1("SELECT COUNT(*) n FROM guide_signatures")["n"], 0)
+        row = db.q1("SELECT channel_id, ignored, stream_format_override FROM source_channels")
+        self.assertIsNone(row["channel_id"])
+        self.assertEqual(row["ignored"], 0)
+        self.assertEqual(row["stream_format_override"], "")
+
     def test_merge_duplicates_keeps_loose_name_matches_for_review(self):
         a = self.add_channel("Duck Dynasty by A&E")
         b = self.add_channel("Duck Dynasty by History")

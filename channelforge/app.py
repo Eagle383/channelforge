@@ -189,6 +189,25 @@ def channels_delete(request: Request, channel_id: int = Form(...)):
     return back(request, "deleted")
 
 
+@app.post("/channels/reset")
+def channels_reset(request: Request, confirm: str = Form("")):
+    if confirm.strip() != "DELETE":
+        return back(request, "type DELETE to reset channels")
+    stats = {
+        "channels": db.q1("SELECT COUNT(*) n FROM channels")["n"],
+        "rules": db.q1("SELECT COUNT(*) n FROM rules")["n"],
+        "assignments": db.q1("SELECT COUNT(*) n FROM source_channels WHERE channel_id IS NOT NULL OR ignored = 1")["n"],
+    }
+    conn = db.connect()
+    with conn:
+        conn.execute("UPDATE source_channels SET channel_id = NULL, ignored = 0, stream_format_override = ''")
+        conn.execute("DELETE FROM dupe_dismissed")
+        conn.execute("DELETE FROM guide_signatures")
+        conn.execute("DELETE FROM rules")
+        conn.execute("DELETE FROM channels")
+    return back(request, f"reset {stats['channels']} channels, {stats['rules']} rules, {stats['assignments']} assignments/ignores")
+
+
 # ---------- possible-duplicates review ----------
 @app.get("/dupes", response_class=HTMLResponse)
 def dupes_page(request: Request, q: str = "", confidence: str = "all", page: int = 1, per_page: int = 50):

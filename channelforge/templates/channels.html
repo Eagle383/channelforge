@@ -45,6 +45,17 @@
   </div>
 </form></details>
 
+<details class="editor">
+  <summary>Reset channels</summary>
+  <p class="dim small">Deletes all channels and rules, clears source assignments, ignores, duplicate dismissals, and guide fingerprints. Sources and fetched source rows stay in place so a Refresh can rebuild from the feeds.</p>
+  <form method="post" action="/channels/reset" onsubmit="return confirm('Delete all channels, rules, assignments, ignores, duplicate dismissals, and guide fingerprints? Sources stay configured.')">
+    <div class="grid">
+      <label>Type DELETE to confirm <input name="confirm" autocomplete="off" required></label>
+      <label>&nbsp;<button class="danger">Reset channels</button></label>
+    </div>
+  </form>
+</details>
+
 {# no per-row forms/inputs here: with thousands of rows they make form-scanning
    browser extensions (password managers) freeze the page — number cells become
    an input on click, the edit panel is fetched on demand #}
