@@ -24,6 +24,7 @@
   <form class="inline" method="post" action="/jobs/run" title="Merge channels that share a guide station id or are 'by <brand>' renames of each other">
     <input type="hidden" name="job_type" value="dedupe"><button class="quiet" {{ 'disabled' if running }}>Merge duplicates</button>
   </form>
+  <a class="btn quiet" href="/dupes" title="Channels whose names look related but need a human verdict to merge">Review possible dupes</a>
   <a class="btn quiet" href="/export/channels.csv">Export CSV</a>
   <form class="inline" method="post" action="/import/channels" enctype="multipart/form-data">
     <input type="file" name="file" accept=".csv" required><button class="quiet">Import CSV</button>

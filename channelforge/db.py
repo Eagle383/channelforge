@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS rules (
     set_value TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS dupe_dismissed (            -- "not duplicates" verdicts from the review page
+    a INTEGER NOT NULL,                                 -- channel id pair, a < b
+    b INTEGER NOT NULL,
+    PRIMARY KEY (a, b)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

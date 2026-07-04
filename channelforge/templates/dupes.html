@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Possible duplicates <span class="dim small">({{ groups|length }} groups)</span></h1>
+<p class="dim small">Channels whose names look related but lack the hard evidence (shared guide station id, "by brand" rename) that the automatic merge requires — so nothing here merges on its own. Pick the channel to keep and merge the ticked ones into it, or mark the group "not duplicates" to stop it being suggested.</p>
+
+{% for g in groups %}
+<form id="dismiss-{{ loop.index }}" method="post" action="/dupes/dismiss">
+  <input type="hidden" name="group_ids" value="{{ g.channels|map(attribute='id')|join(',') }}">
+</form>
+<form method="post" action="/dupes/merge" style="margin-bottom:22px">
+  <table>
+    <tr><th>Keep</th><th>Merge</th><th>Name</th><th>No.</th><th>Station ID</th><th>tvg-id</th><th>Providers</th><th>Streams</th></tr>
+    {% for c in g.channels %}
+    <tr>
+      <td><input type="radio" name="keeper_id" value="{{ c.id }}" {{ 'checked' if loop.first }}></td>
+      <td><input type="checkbox" name="merge_ids" value="{{ c.id }}" checked></td>
+      <td>{{ c.name }}{% if not c.active %} <span class="badge">off</span>{% endif %}</td>
+      <td>{{ c.number }}</td>
+      <td class="small">{{ c.gracenote_id }}</td>
+      <td class="small dim">{{ c.tvg_id }}</td>
+      <td class="small">{{ c.provs }}</td>
+      <td>{{ c.n_children }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="bar" style="margin-top:6px">
+    <span class="dim small grow">{{ g.why }}</span>
+    <button class="quiet small" form="dismiss-{{ loop.index }}">Not duplicates</button>
+    <button class="small">Merge ticked into keeper</button>
+  </div>
+</form>
+{% else %}
+<p class="dim">No suspicious name groups right now.</p>
+{% endfor %}
+{% endblock %}

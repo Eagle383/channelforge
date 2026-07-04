@@ -191,23 +191,136 @@ def merge_duplicates(log=lambda s: None):
             continue
         # keep the plain name over a 'by <brand>' rename, active over inactive, oldest on ties
         group.sort(key=lambda c: (normalize(c["name"]) != dedupe_key(c["name"]), not c["active"], c["id"]))
-        keeper, losers = dict(group[0]), group[1:]
-        for loser in losers:
-            db.execute("UPDATE source_channels SET channel_id = ? WHERE channel_id = ?", (keeper["id"], loser["id"]))
-            db.execute("UPDATE rules SET target_channel_id = ? WHERE target_channel_id = ?", (keeper["id"], loser["id"]))
-            for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description"):
-                if not keeper[f] and loser[f]:
-                    keeper[f] = loser[f]
-            if keeper["preferred_source_id"] is None:
-                keeper["preferred_source_id"] = loser["preferred_source_id"]
-            keeper["attrs"] = json.dumps({**json.loads(loser["attrs"] or "{}"), **json.loads(keeper["attrs"] or "{}")})
-            db.execute("DELETE FROM channels WHERE id = ?", (loser["id"],))
-            log(f"  merged '{loser['name']}' into '{keeper['name']}'")
-            merged += 1
-        db.execute("UPDATE channels SET number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=?, preferred_source_id=?, attrs=? WHERE id=?",
-                   tuple(keeper[f] for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_source_id", "attrs")) + (keeper["id"],))
+        merged += _merge_group(group[0], group[1:], log)
     log(f"dedupe: merged {merged} duplicate channels" if merged else "dedupe: no duplicates found")
     return merged
+
+
+def _merge_group(keeper_row, losers, log=lambda s: None):
+    """Fold losers into keeper: repoint children and rules, backfill the
+    keeper's blank metadata, delete the losers."""
+    keeper = dict(keeper_row)
+    for loser in losers:
+        db.execute("UPDATE source_channels SET channel_id = ? WHERE channel_id = ?", (keeper["id"], loser["id"]))
+        db.execute("UPDATE rules SET target_channel_id = ? WHERE target_channel_id = ?", (keeper["id"], loser["id"]))
+        for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description"):
+            if not keeper[f] and loser[f]:
+                keeper[f] = loser[f]
+        if keeper["preferred_source_id"] is None:
+            keeper["preferred_source_id"] = loser["preferred_source_id"]
+        keeper["attrs"] = json.dumps({**json.loads(loser["attrs"] or "{}"), **json.loads(keeper["attrs"] or "{}")})
+        db.execute("DELETE FROM channels WHERE id = ?", (loser["id"],))
+        log(f"  merged '{loser['name']}' into '{keeper['name']}'")
+    db.execute("UPDATE channels SET number=?, gracenote_id=?, tvg_id=?, logo=?, grp=?, description=?, preferred_source_id=?, attrs=? WHERE id=?",
+               tuple(keeper[f] for f in ("number", "gracenote_id", "tvg_id", "logo", "grp", "description", "preferred_source_id", "attrs")) + (keeper["id"],))
+    return len(losers)
+
+
+def merge_channels(keeper_id, loser_ids, log=lambda s: None):
+    """Manual merge from the duplicates review page."""
+    keeper = db.q1("SELECT * FROM channels WHERE id = ?", (keeper_id,))
+    marks = ",".join("?" * len(loser_ids))
+    losers = [r for r in db.q(f"SELECT * FROM channels WHERE id IN ({marks})", loser_ids) if r["id"] != keeper_id] if loser_ids else []
+    if not keeper or not losers:
+        return 0
+    n = _merge_group(keeper, losers, log)
+    db.executemany("DELETE FROM dupe_dismissed WHERE a = ? OR b = ?", [(r["id"], r["id"]) for r in losers])
+    return n
+
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_STOP_TOKENS = {"the", "a", "an", "and", "with", "by", "of", "en"}
+
+
+def _name_tokens(name):
+    s = unicodedata.normalize("NFKD", (name or "")).casefold()
+    return _TOKEN_RE.findall(s.replace("'", "").replace("’", ""))
+
+
+def _is_subseq(small, big):
+    it = iter(big)
+    return all(ch in it for ch in small)
+
+
+def find_possible_duplicates():
+    """Groups of active channels whose names look related: one name's words
+    contained in another's ('Antiques Roadshow' / 'PBS Antiques Roadshow',
+    'Family Feud' / 'Family Feud Classic') or a leading acronym matching
+    another name's initials ('AFV ...' / \"America's Funniest Home Videos\").
+
+    Review-only evidence — many hits are genuinely distinct feeds (Tastemade /
+    Tastemade Travel), so nothing here is ever merged automatically; the
+    Duplicates page shows the groups for a human merge/dismiss verdict.
+    Pairs dismissed there (dupe_dismissed) stop being reported."""
+    channels = db.q("SELECT * FROM channels WHERE active = 1")
+    dismissed = {(r["a"], r["b"]) for r in db.q("SELECT a, b FROM dupe_dismissed")}
+    toks = {}       # id -> frozenset of non-stopword tokens
+    initials = {}   # id -> first letters of every token, in order
+    for c in channels:
+        words = _name_tokens(c["name"])
+        t = frozenset(w for w in words if w not in _STOP_TOKENS)
+        if t:
+            toks[c["id"]] = t
+            initials[c["id"]] = "".join(w[0] for w in words)
+
+    posting = {}    # token -> ids of channels whose name carries it
+    for cid, t in toks.items():
+        for w in t:
+            posting.setdefault(w, set()).add(cid)
+
+    pairs = {}      # (small id, big id) -> why
+    def edge(a, b, why):
+        key = (min(a, b), max(a, b))
+        if key not in dismissed:
+            pairs.setdefault(key, why)
+
+    fanout_cap = 6   # a name contained in more channels than this is generic ('FOX', 'Comedy'), not a duplicate
+    for cid, t in toks.items():
+        rarest = min(t, key=lambda w: len(posting[w]))
+        supers = [o for o in posting[rarest] if o != cid and t <= toks[o]]
+        if len(supers) <= fanout_cap:
+            for other in supers:
+                edge(cid, other, "one name's words contained in the other's")
+    by_id = {c["id"]: c for c in channels}
+    acros = {}   # leading all-caps token -> ids of channels starting with it
+    for c in channels:
+        first = (c["name"] or "").split()[0] if (c["name"] or "").split() else ""
+        acro = "".join(ch for ch in first if ch.isalpha())
+        if acro.isupper() and 3 <= len(acro) <= 6:
+            acros.setdefault(acro, []).append(c["id"])
+    for acro, ids in acros.items():
+        if len(ids) > 3:   # borne by many channels = a network prefix (ABC 7, NBC News...), not an abbreviation
+            continue
+        a = acro.casefold()
+        # near-exact expansions only: same first letter, at most one extra word's initial
+        targets = [o for o, ini in initials.items()
+                   if o not in ids and ini[:1] == a[0] and len(a) <= len(ini) <= len(a) + 1
+                   and _is_subseq(a, ini)]
+        if len(targets) > 3:   # expands to half the lineup = coincidence
+            continue
+        for cid in ids:
+            for other in targets:
+                edge(cid, other, f"'{acro}' could abbreviate '{by_id[other]['name']}'")
+
+    parent = {c["id"]: c["id"] for c in channels}
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    for a, b in pairs:
+        parent[max(find(a), find(b))] = min(find(a), find(b))
+
+    groups = {}
+    for a, b in pairs:
+        groups.setdefault(find(a), set()).update((a, b))
+    out = []
+    for ids in groups.values():
+        members = sorted((by_id[i] for i in ids), key=lambda c: (len(toks.get(c["id"], ())), c["name"].casefold()))
+        why = sorted({w for k, w in pairs.items() if k[0] in ids or k[1] in ids})
+        out.append({"channels": members, "why": "; ".join(why)})
+    out.sort(key=lambda g: g["channels"][0]["name"].casefold())
+    return out
 
 
 def apply_all(log=lambda s: None):

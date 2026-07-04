@@ -189,6 +189,40 @@ def channels_delete(request: Request, channel_id: int = Form(...)):
     return back(request, "deleted")
 
 
+# ---------- possible-duplicates review ----------
+@app.get("/dupes", response_class=HTMLResponse)
+def dupes_page(request: Request):
+    groups = rules.find_possible_duplicates()
+    provs, kids = {}, {}
+    for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, s.name sname
+                     FROM source_channels sc JOIN sources s ON s.id = sc.source_id
+                     WHERE sc.present = 1 AND sc.channel_id IS NOT NULL"""):
+        provs.setdefault(k["cid"], set()).add(m3u.provider_of(k["ext"]) or k["sname"])
+        kids[k["cid"]] = kids.get(k["cid"], 0) + 1
+    for g in groups:
+        g["channels"] = [dict(c, provs=", ".join(sorted(provs.get(c["id"], ()), key=str.casefold)),
+                              n_children=kids.get(c["id"], 0)) for c in g["channels"]]
+    return render("dupes.html", request, groups=groups)
+
+
+@app.post("/dupes/merge")
+def dupes_merge(request: Request, keeper_id: int = Form(...), merge_ids: list[int] = Form([])):
+    losers = [i for i in merge_ids if i != keeper_id]
+    if keeper_id not in merge_ids or not losers:
+        return back(request, "pick a keeper and at least one other channel to merge")
+    n = rules.merge_channels(keeper_id, losers)
+    keeper = db.q1("SELECT name FROM channels WHERE id = ?", (keeper_id,))
+    return back(request, f"merged {n} channels into '{keeper['name']}'" if n else "nothing merged")
+
+
+@app.post("/dupes/dismiss")
+def dupes_dismiss(request: Request, group_ids: str = Form(...)):
+    ids = sorted({int(x) for x in group_ids.split(",") if x.strip().isdigit()})
+    pairs = [(a, b) for i, a in enumerate(ids) for b in ids[i + 1:]]
+    db.executemany("INSERT OR IGNORE INTO dupe_dismissed(a, b) VALUES(?, ?)", pairs)
+    return back(request, "dismissed — this group won't be suggested again")
+
+
 # ---------- assignments (children) ----------
 @app.get("/assign", response_class=HTMLResponse)
 def assign_page(request: Request, q: str = "", show: str = "unassigned"):
