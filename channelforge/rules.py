@@ -30,6 +30,10 @@ def dedupe_key(name):
     an exact normalize() match always wins, and a rule can override either."""
     return normalize(_BY_BRAND_RE.sub("", name or ""))
 
+
+def is_by_brand_alias(name):
+    return dedupe_key(name) != normalize(name)
+
 MATCH_FIELDS = ["name", "tvg_id", "tvg_name", "group", "url", "external_id", "any"]
 MATCH_TYPES = ["equals", "not_equals", "contains", "not_contains", "starts", "not_starts", "ends", "not_ends", "regex", "not_regex"]
 ACTIONS = ["assign", "ignore", "set_field"]
@@ -144,11 +148,11 @@ def merge_duplicates(log=lambda s: None):
     """Collapse duplicate lineup channels into one and delete the extras.
 
     Two channels are duplicates when they share a guide station id (their own
-    gracenote_id or one carried by a present child) or the same dedupe_key()
-    name ('Duck Dynasty' / 'Duck Dynasty by A&E') — the same evidence the
-    auto-assign fallthrough uses, so anything this merges is a pair auto-assign
-    would have kept together in the first place. Names that merely look alike
-    ('Fifth Gear' / 'Fifth Gear (UK)') are never merged without station-id proof.
+    gracenote_id or one carried by a present child), have the same normalized
+    name ('123 GO!' / '123GO!'), or are a plain name plus its trailing
+    'by <brand>' provider alias ('Duck Dynasty' / 'Duck Dynasty by A&E').
+    Names that merely look alike ('Fifth Gear' / 'Fifth Gear (UK)') are never
+    merged without station-id proof.
 
     The survivor is the plainest active name (oldest on ties). Children and
     rules are repointed at it, its blank metadata is backfilled from the
@@ -171,10 +175,32 @@ def merge_duplicates(log=lambda s: None):
             parent[max(ra, rb)] = min(ra, rb)
 
     seen = {}
+    by_norm = {}
+    alias_waiting = {}
+    plain_by_key = {}
+
+    def remember_plain(key, cid):
+        plain = plain_by_key.setdefault(key, cid)
+        union(plain, cid)
+        for alias in alias_waiting.pop(key, ()):
+            union(plain, alias)
+
+    def remember_alias(key, cid):
+        plain = plain_by_key.get(key)
+        if plain is None:
+            alias_waiting.setdefault(key, []).append(cid)
+        else:
+            union(plain, cid)
+
     for c in channels:
+        norm = normalize(c["name"])
+        if norm:
+            union(by_norm.setdefault(norm, c["id"]), c["id"])
         key = dedupe_key(c["name"])
-        if key:
-            union(seen.setdefault(("key", key), c["id"]), c["id"])
+        if key and key != norm:
+            remember_alias(key, c["id"])
+        elif key:
+            remember_plain(key, c["id"])
         if c["gracenote_id"]:
             union(seen.setdefault(("sid", c["gracenote_id"]), c["id"]), c["id"])
     for row in db.q("SELECT channel_id, attrs FROM source_channels WHERE channel_id IS NOT NULL AND present = 1"):
@@ -190,7 +216,7 @@ def merge_duplicates(log=lambda s: None):
         if len(group) < 2:
             continue
         # keep the plain name over a 'by <brand>' rename, active over inactive, oldest on ties
-        group.sort(key=lambda c: (normalize(c["name"]) != dedupe_key(c["name"]), not c["active"], c["id"]))
+        group.sort(key=lambda c: (is_by_brand_alias(c["name"]), not c["active"], c["id"]))
         merged += _merge_group(group[0], group[1:], log)
     log(f"dedupe: merged {merged} duplicate channels" if merged else "dedupe: no duplicates found")
     return merged
@@ -229,7 +255,10 @@ def merge_channels(keeper_id, loser_ids, log=lambda s: None):
 
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
-_STOP_TOKENS = {"the", "a", "an", "and", "with", "by", "of", "en"}
+_STOP_TOKENS = {
+    "the", "a", "an", "and", "with", "by", "of", "en",
+    "channel", "free", "hd", "live", "network", "news", "now", "plus", "tv",
+}
 
 
 def _name_tokens(name):
@@ -276,6 +305,8 @@ def find_possible_duplicates():
 
     fanout_cap = 6   # a name contained in more channels than this is generic ('FOX', 'Comedy'), not a duplicate
     for cid, t in toks.items():
+        if len(t) < 2 or not any(len(w) >= 4 and not w.isdigit() for w in t):
+            continue
         rarest = min(t, key=lambda w: len(posting[w]))
         supers = [o for o in posting[rarest] if o != cid and t <= toks[o]]
         if len(supers) <= fanout_cap:
@@ -301,6 +332,17 @@ def find_possible_duplicates():
         for cid in ids:
             for other in targets:
                 edge(cid, other, f"'{acro}' could abbreviate '{by_id[other]['name']}'")
+
+    alias_groups = {}
+    for c in channels:
+        if is_by_brand_alias(c["name"]):
+            alias_groups.setdefault(dedupe_key(c["name"]), []).append(c["id"])
+    for key, ids in alias_groups.items():
+        if not key or len(ids) < 2 or len(ids) > fanout_cap:
+            continue
+        for i, cid in enumerate(ids):
+            for other in ids[i + 1:]:
+                edge(cid, other, "same name after trailing 'by <brand>' is removed")
 
     parent = {c["id"]: c["id"] for c in channels}
     def find(x):

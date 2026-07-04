@@ -191,7 +191,7 @@ def channels_delete(request: Request, channel_id: int = Form(...)):
 
 # ---------- possible-duplicates review ----------
 @app.get("/dupes", response_class=HTMLResponse)
-def dupes_page(request: Request):
+def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50):
     groups = rules.find_possible_duplicates()
     provs, kids = {}, {}
     for k in db.q("""SELECT sc.channel_id cid, sc.external_id ext, s.name sname
@@ -202,7 +202,17 @@ def dupes_page(request: Request):
     for g in groups:
         g["channels"] = [dict(c, provs=", ".join(sorted(provs.get(c["id"], ()), key=str.casefold)),
                               n_children=kids.get(c["id"], 0)) for c in g["channels"]]
-    return render("dupes.html", request, groups=groups)
+    if q:
+        needle = q.casefold()
+        groups = [g for g in groups if needle in g["why"].casefold()
+                  or any(needle in c["name"].casefold() for c in g["channels"])]
+    total = len(groups)
+    per_page = min(max(per_page, 10), 200)
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(max(page, 1), pages)
+    start = (page - 1) * per_page
+    return render("dupes.html", request, groups=groups[start:start + per_page],
+                  total=total, q=q, page_no=page, pages=pages, per_page=per_page)
 
 
 @app.post("/dupes/merge")

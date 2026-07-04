@@ -111,7 +111,7 @@ DEFAULT_SETTINGS = {
     "auto_rule_on_match": "1",                 # fallthrough matches are pinned as editable `auto:` equals rules
     "auto_assign_normalized": "1",             # unmatched source channels attach to channels by normalized name
     "auto_create_channels": "0",               # ...and create the channel when nothing matches
-    "auto_merge_duplicates": "1",              # every refresh merges channels sharing a station id or dedupe_key name
+    "auto_merge_duplicates": "1",              # every refresh merges channels with hard duplicate evidence
     "provider_order": "[]",                    # JSON list: provider prefixes (samsung, stirr, ...) best-first
     "prerefresh_url": "",                      # POSTed before each refresh (e.g. FastChannels /api/sources/force-refresh)
     "prerefresh_wait_min": "",                 # minutes to wait after the hook so the source can rebuild

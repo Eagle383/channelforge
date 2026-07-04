@@ -1,7 +1,25 @@
 {% extends "base.html" %}
+{% macro page_link(n, label) -%}
+  <a class="btn quiet small" href="/dupes?q={{ q|urlencode }}&per_page={{ per_page }}&page={{ n }}">{{ label }}</a>
+{%- endmacro %}
 {% block content %}
-<h1>Possible duplicates <span class="dim small">({{ groups|length }} groups)</span></h1>
-<p class="dim small">Channels whose names look related but lack the hard evidence (shared guide station id, "by brand" rename) that the automatic merge requires — so nothing here merges on its own. Pick the channel to keep and merge the ticked ones into it, or mark the group "not duplicates" to stop it being suggested.</p>
+<h1>Possible duplicates <span class="dim small">({{ total }} groups)</span></h1>
+<p class="dim small">Channels whose names look related but lack the hard evidence (shared guide station id, exact normalized name, or plain-name/"by brand" pair) that the automatic merge requires — so nothing here merges on its own. Pick the channel to keep and merge the ticked ones into it, or mark the group "not duplicates" to stop it being suggested.</p>
+
+<form class="bar" method="get" action="/dupes">
+  <input name="q" value="{{ q }}" placeholder="search duplicate groups...">
+  <select name="per_page">
+    {% for n in [25, 50, 100, 200] %}
+    <option value="{{ n }}" {{ 'selected' if per_page == n }}>{{ n }} per page</option>
+    {% endfor %}
+  </select>
+  <button class="quiet small">Filter</button>
+  {% if q %}<a class="btn quiet small" href="/dupes">clear</a>{% endif %}
+  <span class="grow"></span>
+  <span class="dim small">page {{ page_no }} of {{ pages }}</span>
+  {% if page_no > 1 %}{{ page_link(page_no - 1, 'Prev') }}{% endif %}
+  {% if page_no < pages %}{{ page_link(page_no + 1, 'Next') }}{% endif %}
+</form>
 
 {% for g in groups %}
 <form id="dismiss-{{ loop.index }}" method="post" action="/dupes/dismiss">
@@ -30,6 +48,15 @@
   </div>
 </form>
 {% else %}
-<p class="dim">No suspicious name groups right now.</p>
+<p class="dim">No suspicious name groups match this filter.</p>
 {% endfor %}
+
+{% if pages > 1 %}
+<div class="bar">
+  <span class="grow"></span>
+  {% if page_no > 1 %}{{ page_link(page_no - 1, 'Prev') }}{% endif %}
+  <span class="dim small">page {{ page_no }} of {{ pages }}</span>
+  {% if page_no < pages %}{{ page_link(page_no + 1, 'Next') }}{% endif %}
+</div>
+{% endif %}
 {% endblock %}
