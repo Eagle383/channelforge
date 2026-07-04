@@ -155,6 +155,16 @@ plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)
             {"ABC KATU Portland OR", "KATU ABC 2 News Portland OR"},
         )
 
+    def test_possible_duplicates_skips_franchise_umbrella_names(self):
+        self.add_channel("Star Trek")
+        self.add_channel("Star Trek: Deep Space Nine")
+        self.add_channel("Star Trek: The Next Generation")
+        self.add_channel("Star Trek: Voyager")
+
+        groups = rules.find_possible_duplicates()
+
+        self.assertEqual(groups, [])
+
     def test_possible_duplicates_uses_matching_guide_tvg_ids(self):
         source = self.add_source("fastchannels")
         a = self.add_channel("Mystery Theater")

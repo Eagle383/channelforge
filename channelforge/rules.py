@@ -396,7 +396,9 @@ def find_possible_duplicates():
 
     fanout_cap = 6   # a name contained in more channels than this is generic ('FOX', 'Comedy'), not a duplicate
     for cid, t in toks.items():
-        if len(t) < 2 or not any(len(w) >= 4 and not w.isdigit() for w in t):
+        # Two-word roots are usually franchise/brand umbrellas, not duplicates
+        # of every longer channel name under them: Star Trek, Law & Order, etc.
+        if len(t) < 3 or not any(len(w) >= 4 and not w.isdigit() for w in t):
             continue
         rarest = min(t, key=lambda w: len(posting[w]))
         supers = [o for o in posting[rarest] if o != cid and t <= toks[o]]
