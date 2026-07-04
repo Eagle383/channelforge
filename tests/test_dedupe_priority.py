@@ -208,6 +208,29 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertIn("source priority 1", html)
         self.assertIn("provider rank unranked", html)
 
+    def test_dupes_page_uses_provider_priority_when_source_priority_ties(self):
+        source = self.add_source("fastchannels", priority=10)
+        low_provider_channel = self.add_channel("Alpha Movies")
+        high_provider_channel = self.add_channel("Zulu Movies")
+        attrs = {"tvg-id": "movies.example"}
+        self.add_child(source, low_provider_channel, "xumo.movies", "Alpha Movies",
+                       url="http://xumo.example/stream.m3u8", attrs=attrs)
+        self.add_child(source, high_provider_channel, "pluto.movies", "Zulu Movies",
+                       url="http://pluto.example/stream.m3u8", attrs=attrs)
+        db.set_setting("provider_order", json.dumps(["pluto", "xumo"]))
+
+        with TestClient(webapp.app) as client:
+            response = client.get("/dupes")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        checked = f'name="keeper_id" value="{high_provider_channel}" checked'
+        unchecked = f'name="keeper_id" value="{low_provider_channel}"'
+        self.assertIn(checked, html)
+        self.assertLess(html.index(checked), html.index(unchecked))
+        self.assertIn("fastchannels / pluto", html)
+        self.assertIn("source priority 10, provider rank 1", html)
+
     def test_merge_duplicates_merges_plain_name_and_provider_alias(self):
         source = self.add_source("fastchannels")
         plain = self.add_channel("Duck Dynasty")
