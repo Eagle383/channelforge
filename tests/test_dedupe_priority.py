@@ -391,6 +391,21 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertIn("same guide programme lineup", html)
         self.assertIn("lineup: Show A | Show B", html)
 
+    def test_refresh_rebuilds_outputs_after_auto_dedupe_merges(self):
+        calls = []
+        old_build_outputs = refresh.build_outputs
+        old_merge_duplicates = rules.merge_duplicates
+        try:
+            refresh.build_outputs = lambda log=lambda s: None: calls.append("build")
+            rules.merge_duplicates = lambda log=lambda s: None: calls.append("merge") or 1
+
+            refresh.run_refresh(lambda _s: None, skip_hook=True)
+
+            self.assertEqual(calls, ["build", "merge", "build"])
+        finally:
+            refresh.build_outputs = old_build_outputs
+            rules.merge_duplicates = old_merge_duplicates
+
     def test_dupes_page_can_bulk_dismiss_visible_weak_groups(self):
         self.add_channel("CNA")
         self.add_channel("CBS News Atlanta")
