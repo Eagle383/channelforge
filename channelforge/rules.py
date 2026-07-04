@@ -385,7 +385,7 @@ def find_possible_duplicates():
             return
         guide_groups.setdefault((kind, value), set()).add(cid)
 
-    signatures = {r["tvg_id"]: _signature_keys(r) for r in db.q("SELECT tvg_id, signature FROM guide_signatures WHERE n >= 8")}
+    signatures = {r["tvg_id"]: _signature_keys(r) for r in db.q("SELECT tvg_id, signature FROM guide_signatures WHERE n >= 2")}
     schedule_keys = {}
     def add_schedule(cid, tvg_id):
         keys = signatures.get((tvg_id or "").strip())
@@ -431,7 +431,8 @@ def find_possible_duplicates():
                 programme_pair_hits[k] = programme_pair_hits.get(k, 0) + 1
     for (cid, other), hits in programme_pair_hits.items():
         smaller = min(len(schedule_keys[cid]), len(schedule_keys[other]))
-        if smaller >= 8 and hits >= 8 and hits / smaller >= 0.75:
+        min_hits = 2 if smaller <= 3 else 3
+        if smaller >= 2 and hits >= min_hits and hits / smaller >= 0.75:
             edge(cid, other, "same guide programme lineup")
 
     parent = {c["id"]: c["id"] for c in channels}

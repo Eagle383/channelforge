@@ -6,6 +6,7 @@ import hashlib
 import io
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _SIG_LIMIT = 96
@@ -24,11 +25,24 @@ def _norm_text(text):
     return " ".join(_WORD_RE.findall((text or "").casefold()))
 
 
+def _rounded_start_key(start):
+    raw = (start or "").strip()[:12]  # YYYYMMDDHHMM, ignoring seconds/timezone text
+    if len(raw) != 12 or not raw.isdigit():
+        return ""
+    try:
+        dt = datetime.strptime(raw, "%Y%m%d%H%M")
+    except ValueError:
+        return ""
+    dt += timedelta(minutes=(2 if dt.minute % 5 >= 3 else 0))
+    dt -= timedelta(minutes=dt.minute % 5)
+    return dt.strftime("%Y%m%d%H%M")
+
+
 def _programme_key(elem):
     title = _norm_text(elem.findtext("title"))
     if not title:
         return "", ""
-    start = (elem.get("start") or "").strip()[:12]  # YYYYMMDDHHMM, ignoring seconds/timezone text
+    start = _rounded_start_key(elem.get("start"))
     if not start:
         return "", ""
     key = hashlib.sha1(f"{start}|{title}".encode("utf-8")).hexdigest()[:16]

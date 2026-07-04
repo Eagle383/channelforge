@@ -181,6 +181,21 @@ class DedupePriorityTests(unittest.TestCase):
             {"Alpha One", "Zulu Two"},
         )
 
+    def test_possible_duplicates_uses_short_high_overlap_programme_lineups(self):
+        source = self.add_source("fastchannels")
+        a = self.add_channel("Big 12 Network")
+        b = self.add_channel("Big 12 Studios")
+        keys = ["football-900", "football-1200"]
+        self.add_signature("network.epg", keys)
+        self.add_signature("studios.epg", keys)
+        self.add_child(source, a, "one.big12", "Big 12 Network", attrs={"tvg-id": "network.epg"})
+        self.add_child(source, b, "two.big12", "Big 12 Studios", attrs={"tvg-id": "studios.epg"})
+
+        groups = rules.find_possible_duplicates()
+
+        self.assertEqual(len(groups), 1)
+        self.assertIn("same guide programme lineup", groups[0]["why"])
+
     def test_xmltv_write_combined_returns_programme_signatures(self):
         out_path = os.path.join(self.tmp.name, "guide.xml")
         xml = b"""<tv>
@@ -195,6 +210,22 @@ class DedupePriorityTests(unittest.TestCase):
         self.assertEqual(kept, 1)
         self.assertEqual(signatures["alpha.epg"]["n"], 2)
         self.assertIn("Show A", signatures["alpha.epg"]["sample"])
+
+    def test_xmltv_programme_signatures_tolerate_nearby_start_minutes(self):
+        out_path = os.path.join(self.tmp.name, "guide.xml")
+        xml = b"""<tv>
+          <channel id="network.epg"><display-name>Network</display-name></channel>
+          <channel id="studios.epg"><display-name>Studios</display-name></channel>
+          <programme start="20260704210000 +0000" channel="network.epg"><title>BYU vs. Cincinnati Football Full Game Replay</title></programme>
+          <programme start="20260704235900 +0000" channel="network.epg"><title>Utah vs. BYU Football Full Game Replay</title></programme>
+          <programme start="20260704210000 +0000" channel="studios.epg"><title>BYU vs. Cincinnati Football Full Game Replay</title></programme>
+          <programme start="20260705000000 +0000" channel="studios.epg"><title>Utah vs. BYU Football Full Game Replay</title></programme>
+        </tv>"""
+
+        _kept, signatures = xmltv.write_combined(
+            [xml], set(), out_path, {"network.epg", "studios.epg"})
+
+        self.assertEqual(set(signatures["network.epg"]["signature"]), set(signatures["studios.epg"]["signature"]))
 
     def test_xmltv_indexes_signature_ids_outside_output_guide(self):
         out_path = os.path.join(self.tmp.name, "guide.xml")
