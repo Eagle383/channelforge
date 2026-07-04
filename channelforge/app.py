@@ -194,6 +194,10 @@ def channels_delete(request: Request, channel_id: int = Form(...)):
 def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50):
     groups = rules.find_possible_duplicates()
     provs, kids, guide = {}, {}, {}
+    pick_pool = refresh.assigned_children()
+    provider_rank = {p: i for i, p in enumerate(json.loads(db.get_setting("provider_order") or "[]"))}
+    unranked_provider = len(provider_rank)
+    guide_samples = {r["tvg_id"]: r["sample"] for r in db.q("SELECT tvg_id, sample FROM guide_signatures WHERE n >= 8")}
 
     def add_guide(cid, label, value):
         value = (value or "").strip()
@@ -208,14 +212,20 @@ def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50)
         kids[k["cid"]] = kids.get(k["cid"], 0) + 1
         attrs = db.attrs_of(k)
         add_guide(k["cid"], "station", attrs.get("tvc-guide-stationid"))
-        add_guide(k["cid"], "tvg", attrs.get("tvg-id"))
+        tvg_id = attrs.get("tvg-id")
+        add_guide(k["cid"], "tvg", tvg_id)
         add_guide(k["cid"], "title", attrs.get("tvc-guide-title") or attrs.get("tvg-name"))
         add_guide(k["cid"], "desc", attrs.get("tvc-guide-description") or attrs.get("tvg-description"))
+        add_guide(k["cid"], "lineup", guide_samples.get(tvg_id))
 
     def guide_hint(c):
-        data = guide.get(c["id"], {})
+        data = {k: set(v) for k, v in guide.get(c["id"], {}).items()}
+        if c["tvg_id"]:
+            add = guide_samples.get(c["tvg_id"])
+            if add:
+                data.setdefault("lineup", set()).add(add)
         parts = []
-        for label in ("station", "tvg", "title"):
+        for label in ("station", "tvg", "title", "lineup"):
             vals = sorted(data.get(label, ()), key=str.casefold)
             if vals:
                 parts.append(f"{label}: {vals[0]}")
@@ -225,9 +235,31 @@ def dupes_page(request: Request, q: str = "", page: int = 1, per_page: int = 50)
             parts.append((desc[:90] + "...") if len(desc) > 90 else desc)
         return " | ".join(parts)
 
+    def best_stream_info(c):
+        best, _fmt = refresh.pick_stream(pick_pool.get(c["id"], []), c["preferred_source_id"])
+        if not best:
+            return "", "", 999999, unranked_provider, 999999999
+        provider = m3u.provider_of(best["external_id"])
+        label = provider or best["src_name"]
+        if best["src_name"] and provider:
+            label = f"{best['src_name']} / {provider}"
+        priority = best["src_priority"]
+        return label, best["url"], priority, provider_rank.get(provider, unranked_provider), best["id"]
+
     for g in groups:
-        g["channels"] = [dict(c, provs=", ".join(sorted(provs.get(c["id"], ()), key=str.casefold)),
-                              n_children=kids.get(c["id"], 0), guide_hint=guide_hint(c)) for c in g["channels"]]
+        rows = []
+        for c in g["channels"]:
+            best_label, best_url, best_priority, best_provider_rank, best_id = best_stream_info(c)
+            rows.append(dict(c, provs=", ".join(sorted(provs.get(c["id"], ()), key=str.casefold)),
+                             n_children=kids.get(c["id"], 0), guide_hint=guide_hint(c),
+                             best_stream=best_label, best_stream_url=best_url,
+                             best_priority=best_priority, best_provider_rank=best_provider_rank,
+                             best_stream_id=best_id))
+        g["channels"] = sorted(rows, key=lambda c: (
+            c["best_priority"], c["best_provider_rank"], c["best_stream_id"], c["name"].casefold()))
+    groups.sort(key=lambda g: (
+        g["channels"][0]["best_priority"] if g["channels"] else 999999,
+        g["channels"][0]["name"].casefold() if g["channels"] else ""))
     if q:
         needle = q.casefold()
         groups = [g for g in groups if needle in g["why"].casefold()

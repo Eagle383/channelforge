@@ -210,6 +210,7 @@ def build_outputs(log=lambda s: None):
             files.append(f"{fname} ({len(chunk)} channels)")
 
     # combined guide for the epg lineups, streamed to disk to bound memory
+    db.execute("DELETE FROM guide_signatures")
     if wanted_tvg_ids:
         blobs = []
         for s in db.q("SELECT * FROM sources WHERE active = 1 AND epg_url != ''"):
@@ -219,7 +220,15 @@ def build_outputs(log=lambda s: None):
             except Exception as e:
                 log(f"  guide: {s['name']} FAILED ({e})")
         log(f"  guide: merging {len(blobs)} guides for {len(wanted_tvg_ids)} station ids...")
-        kept = xmltv.write_combined(blobs, wanted_tvg_ids, os.path.join(d, "cf_guide.xml"))
+        kept, signatures = xmltv.write_combined(blobs, wanted_tvg_ids, os.path.join(d, "cf_guide.xml"))
+        if signatures:
+            updated = db.local_now().isoformat(timespec="seconds")
+            db.executemany(
+                "INSERT INTO guide_signatures(tvg_id, signature, sample, n, updated) VALUES(?, ?, ?, ?, ?)",
+                [(tvg_id, json.dumps(data["signature"]), data["sample"], data["n"], updated)
+                 for tvg_id, data in signatures.items()]
+            )
+            log(f"  guide: indexed programme lineups for {len(signatures)} station ids")
         files.append(f"cf_guide.xml ({kept} channels)")
 
     log(f"outputs: {', '.join(files) if files else 'nothing generated'}")

@@ -3,7 +3,10 @@ import os
 import tempfile
 import unittest
 
-from channelforge import db, refresh, rules
+from fastapi.testclient import TestClient
+
+from channelforge import app as webapp
+from channelforge import db, refresh, rules, xmltv
 
 
 def reset_db(data_dir):
@@ -52,6 +55,12 @@ class DedupePriorityTests(unittest.TestCase):
                 url or f"http://example.test/{external_id}.m3u8",
                 json.dumps(attrs or {}),
             ),
+        )
+
+    def add_signature(self, tvg_id, keys):
+        db.execute(
+            "INSERT INTO guide_signatures(tvg_id, signature, sample, n, updated) VALUES(?, ?, ?, ?, ?)",
+            (tvg_id, json.dumps(keys), "Show A | Show B", len(keys), "now"),
         )
 
     def test_merge_duplicates_keeps_loose_name_matches_for_review(self):
@@ -140,6 +149,62 @@ class DedupePriorityTests(unittest.TestCase):
         groups = rules.find_possible_duplicates()
 
         self.assertEqual(groups, [])
+
+    def test_possible_duplicates_uses_matching_programme_lineups(self):
+        source = self.add_source("fastchannels")
+        a = self.add_channel("Alpha One")
+        b = self.add_channel("Zulu Two")
+        keys = [f"program-{i}" for i in range(10)]
+        self.add_signature("alpha.epg", keys)
+        self.add_signature("zulu.epg", keys)
+        self.add_child(source, a, "one.alpha", "Alpha One", attrs={"tvg-id": "alpha.epg"})
+        self.add_child(source, b, "two.zulu", "Zulu Two", attrs={"tvg-id": "zulu.epg"})
+
+        groups = rules.find_possible_duplicates()
+
+        self.assertEqual(len(groups), 1)
+        self.assertIn("same guide programme lineup", groups[0]["why"])
+        self.assertEqual(
+            {c["name"] for c in groups[0]["channels"]},
+            {"Alpha One", "Zulu Two"},
+        )
+
+    def test_xmltv_write_combined_returns_programme_signatures(self):
+        out_path = os.path.join(self.tmp.name, "guide.xml")
+        xml = b"""<tv>
+          <channel id="alpha.epg"><display-name>Alpha</display-name></channel>
+          <programme start="20260704010000 +0000" channel="alpha.epg"><title>Show A</title></programme>
+          <programme start="20260704020000 +0000" channel="alpha.epg"><title>Show B</title></programme>
+          <programme start="20260704030000 +0000" channel="other.epg"><title>Other</title></programme>
+        </tv>"""
+
+        kept, signatures = xmltv.write_combined([xml], {"alpha.epg"}, out_path)
+
+        self.assertEqual(kept, 1)
+        self.assertEqual(signatures["alpha.epg"]["n"], 2)
+        self.assertIn("Show A", signatures["alpha.epg"]["sample"])
+
+    def test_dupes_page_suggests_keeper_by_output_stream_priority(self):
+        hi = self.add_source("high", priority=1)
+        lo = self.add_source("low", priority=100)
+        low_channel = self.add_channel("Alpha Movies")
+        high_channel = self.add_channel("Zulu Movies")
+        attrs = {"tvg-id": "movies.example"}
+        self.add_child(lo, low_channel, "pluto.movies", "Alpha Movies",
+                       url="http://low.example/stream.m3u8", attrs=attrs)
+        self.add_child(hi, high_channel, "xumo.movies", "Zulu Movies",
+                       url="http://high.example/stream.m3u8", attrs=attrs)
+
+        with TestClient(webapp.app) as client:
+            response = client.get("/dupes")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        checked = f'name="keeper_id" value="{high_channel}" checked'
+        unchecked = f'name="keeper_id" value="{low_channel}"'
+        self.assertIn(checked, html)
+        self.assertLess(html.index(checked), html.index(unchecked))
+        self.assertIn("high / xumo", html)
 
     def test_merge_duplicates_merges_plain_name_and_provider_alias(self):
         source = self.add_source("fastchannels")

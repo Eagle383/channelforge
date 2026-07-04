@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS dupe_dismissed (            -- "not duplicates" verdi
     PRIMARY KEY (a, b)
 );
 
+CREATE TABLE IF NOT EXISTS guide_signatures (           -- compact XMLTV programme-lineup fingerprints by tvg-id
+    tvg_id TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,                            -- JSON list of programme keys
+    sample TEXT NOT NULL DEFAULT '',                    -- short human-readable titles for review
+    n INTEGER NOT NULL DEFAULT 0,
+    updated TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
