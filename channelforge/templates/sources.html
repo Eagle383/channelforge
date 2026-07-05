@@ -55,6 +55,9 @@
 {% if providers %}
 <h2>Provider priority within combined feeds</h2>
 <p class="dim small">Combined feeds carry channels from many providers (<code>samsung.*</code>, <code>stirr.*</code>, ...). When the same channel is available from several providers at the same source priority, the highest provider here wins. Drag to reorder — saves automatically, applies on the next refresh.</p>
+{% if missing_providers %}
+<p class="dim small">Stored but currently absent: {{ missing_providers|join(', ') }}. Their priority is kept and will apply again if those providers return.</p>
+{% endif %}
 <ol id="prov" class="prov-list">
   {% for p in providers %}<li draggable="true" data-p="{{ p }}">{{ p }}</li>{% endfor %}
 </ol>

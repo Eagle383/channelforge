@@ -793,6 +793,27 @@ plmmap_1146,Ignore Spanish Description,On,3,all,tvc_guide_description,regex,(?i)
         row = db.q1("SELECT preferred_provider FROM channels WHERE id = ?", (ch,))
         self.assertEqual(row["preferred_provider"], "pluto")
 
+    def test_provider_order_save_preserves_temporarily_missing_providers(self):
+        db.set_setting("provider_order", json.dumps(["pluto", "vizio", "xumo"]))
+
+        with TestClient(webapp.app) as client:
+            response = client.post("/sources/provider_order", data={"order": "xumo,pluto"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(db.get_setting("provider_order")), ["xumo", "pluto", "vizio"])
+
+    def test_sources_page_shows_stored_missing_providers(self):
+        source = self.add_source("fastchannels")
+        ch = self.add_channel("BBC Earth")
+        self.add_child(source, ch, "pluto.bbc-earth", "BBC Earth")
+        db.set_setting("provider_order", json.dumps(["vizio", "pluto"]))
+
+        with TestClient(webapp.app) as client:
+            response = client.get("/sources")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Stored but currently absent: vizio", response.text)
+
 
 if __name__ == "__main__":
     unittest.main()
