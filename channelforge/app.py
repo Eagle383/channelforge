@@ -62,13 +62,16 @@ def sources_page(request: Request):
     order = json.loads(db.get_setting("provider_order") or "[]")
     found = {m3u.provider_of(r["external_id"]) for r in db.q("SELECT DISTINCT external_id FROM source_channels WHERE present = 1")} - {""}
     providers = [p for p in order if p in found] + sorted(found - set(order))
-    return render("sources.html", request, sources=rows, providers=providers)
+    missing_providers = [p for p in order if p not in found]
+    return render("sources.html", request, sources=rows, providers=providers, missing_providers=missing_providers)
 
 
 @app.post("/sources/provider_order")
 async def sources_provider_order(request: Request):
     form = await request.form()
     order = [p.strip() for p in str(form.get("order", "")).split(",") if p.strip()]
+    existing = [p.strip() for p in json.loads(db.get_setting("provider_order") or "[]") if str(p).strip()]
+    order += [p for p in existing if p not in order]
     db.set_setting("provider_order", json.dumps(order))
     return PlainTextResponse("ok")
 
