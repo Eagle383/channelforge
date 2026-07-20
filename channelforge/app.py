@@ -23,6 +23,11 @@ def startup():
     jobs.start_scheduler()
 
 
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"status": "ok"}
+
+
 def render(name, request, **ctx):
     ctx.update(page=name.replace(".html", ""), version=VERSION, running=jobs.running_job(),
                flash=request.query_params.get("flash", ""))

@@ -63,7 +63,7 @@ def external_id(entry):
             return v
     if entry["name"]:
         return entry["name"]
-    return hashlib.sha1(entry["url"].encode()).hexdigest()[:16]
+    return hashlib.sha1(entry["url"].encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 def generate(rows):
