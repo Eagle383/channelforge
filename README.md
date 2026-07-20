@@ -102,13 +102,15 @@ Channels, rules, and assignments each export to CSV and import back (matched by 
 Docker is the intended way to run channelforge. If you're hacking on it:
 
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 python main.py          # web UI on http://localhost:5100 (CF_PORT / CF_DATA_DIR to override)
 ```
 
 ## Security
 
 channelforge has **no authentication** — anyone who can reach port 5100 can administer it and use it to reach your DVR. Keep it on your LAN. Don't expose it to the internet; if you need remote access, put it behind a VPN or an authenticating reverse proxy.
+
+The supplied image runs as UID/GID `10001`, exposes `/healthz` for container health checks, and parses untrusted XMLTV data with `defusedxml`. Ensure the mounted data directory is writable by UID `10001`.
 
 ## License
 

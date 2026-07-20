@@ -5,8 +5,9 @@ import gzip
 import hashlib
 import io
 import re
-import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+
+from defusedxml import ElementTree as ET
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _SIG_LIMIT = 96
@@ -67,7 +68,7 @@ def programme_signature_key(title, start):
     start = _rounded_start_key(start)
     if not start:
         return ""
-    return hashlib.sha1(f"{start}|{title}".encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(f"{start}|{title}".encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _programme_key(elem):
